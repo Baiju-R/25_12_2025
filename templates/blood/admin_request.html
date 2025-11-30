@@ -1,0 +1,479 @@
+{% extends 'blood/adminbase.html' %}
+{% block content %}
+{% load widget_tweaks %}
+{%load static%}
+
+<style>
+    /* Enhanced Admin Request Styles */
+    .request-dashboard {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px 0;
+    }
+    
+    .dashboard-header {
+        text-align: center;
+        color: white;
+        margin-bottom: 40px;
+    }
+    
+    .dashboard-header h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        margin-bottom: 10px;
+    }
+    
+    .dashboard-header p {
+        font-size: 1.2rem;
+        opacity: 0.9;
+    }
+    
+    .table-container {
+        background: white;
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    .table-title {
+        text-align: center;
+        color: #2c3e50;
+        margin-bottom: 30px;
+        font-weight: 600;
+        position: relative;
+        font-size: 1.8rem;
+    }
+    
+    .table-title::after {
+        content: '';
+        position: absolute;
+        bottom: -10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80px;
+        height: 3px;
+        background: linear-gradient(90deg, #e74c3c, #c0392b);
+        border-radius: 2px;
+    }
+    
+    .alert-message {
+        background: linear-gradient(45deg, #e74c3c, #c0392b);
+        color: white;
+        padding: 15px 25px;
+        border-radius: 15px;
+        text-align: center;
+        margin-bottom: 30px;
+        font-weight: 600;
+        box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
+    }
+    
+    .no-request-message {
+        background: linear-gradient(45deg, #3498db, #2980b9);
+        color: white;
+        padding: 30px;
+        border-radius: 20px;
+        text-align: center;
+        font-size: 1.2rem;
+        font-weight: 600;
+        box-shadow: 0 10px 30px rgba(52, 152, 219, 0.3);
+    }
+    
+    .enhanced-table {
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        border: none !important;
+    }
+    
+    .enhanced-table thead th {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 15px 12px;
+        border: none;
+        font-size: 0.9rem;
+    }
+    
+    .enhanced-table tbody tr {
+        transition: all 0.3s ease;
+        border: none;
+    }
+    
+    .enhanced-table tbody tr:hover {
+        background-color: #f8f9fa;
+        transform: scale(1.01);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    
+    .enhanced-table tbody td {
+        padding: 15px 12px;
+        vertical-align: middle;
+        border: 1px solid #ecf0f1;
+        font-weight: 500;
+    }
+    
+    .enhanced-table tbody tr:nth-child(even) {
+        background-color: #f8f9fa;
+    }
+    
+    .status-label {
+        padding: 8px 15px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        display: inline-block;
+        min-width: 80px;
+        text-align: center;
+    }
+    
+    .status-pending {
+        background: linear-gradient(45deg, #f39c12, #e67e22);
+        color: white;
+        box-shadow: 0 4px 15px rgba(243, 156, 18, 0.3);
+    }
+    
+    .status-approved {
+        background: linear-gradient(45deg, #27ae60, #2ecc71);
+        color: white;
+        box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+    }
+    
+    .status-rejected {
+        background: linear-gradient(45deg, #e74c3c, #c0392b);
+        color: white;
+        box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+    }
+    
+    .action-btn {
+        padding: 8px 15px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: all 0.3s ease;
+        border: none;
+        margin: 2px;
+        min-width: 80px;
+    }
+    
+    .btn-approve {
+        background: linear-gradient(45deg, #27ae60, #2ecc71);
+        color: white;
+        box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+    }
+    
+    .btn-approve:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(39, 174, 96, 0.4);
+        color: white;
+    }
+    
+    .btn-reject {
+        background: linear-gradient(45deg, #e74c3c, #c0392b);
+        color: white;
+        box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+    }
+    
+    .btn-reject:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(231, 76, 60, 0.4);
+        color: white;
+    }
+    
+    .btn-approve a, .btn-reject a {
+        color: white !important;
+        text-decoration: none !important;
+    }
+    
+    .blood-group-badge {
+        background: linear-gradient(45deg, #e74c3c, #c0392b);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 15px;
+        font-weight: 700;
+        font-size: 0.9rem;
+        display: inline-block;
+        min-width: 45px;
+        text-align: center;
+        box-shadow: 0 3px 10px rgba(231, 76, 60, 0.3);
+    }
+    
+    .patient-name {
+        font-weight: 600;
+        color: #2c3e50;
+        font-size: 1.1rem;
+    }
+    
+    .age-display {
+        font-weight: 600;
+        color: #7f8c8d;
+        font-size: 1rem;
+    }
+    
+    .reason-display {
+        color: #8e44ad;
+        font-weight: 500;
+        background: #f8f9fa;
+        padding: 4px 8px;
+        border-radius: 10px;
+        border-left: 3px solid #8e44ad;
+    }
+    
+    .unit-display {
+        font-weight: 700;
+        color: #27ae60;
+        font-size: 1.1rem;
+    }
+    
+    .date-display {
+        color: #5a6c7d;
+        font-weight: 500;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 5px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .table-container {
+            padding: 20px 15px;
+        }
+        
+        .enhanced-table {
+            font-size: 0.85rem;
+        }
+        
+        .enhanced-table thead th,
+        .enhanced-table tbody td {
+            padding: 10px 8px;
+        }
+        
+        .action-btn {
+            padding: 6px 12px;
+            font-size: 0.75rem;
+            min-width: 70px;
+        }
+        
+        .action-buttons {
+            flex-direction: column;
+            gap: 2px;
+        }
+    }
+
+    /* Fix for request ID styling */
+    .request-id {
+        font-weight: 700;
+        color: #667eea;
+        font-family: monospace;
+        font-size: 0.9rem;
+    }
+
+    /* Fix for requester info badges */
+    .requester-info .badge {
+        font-size: 0.75rem;
+        padding: 5px 8px;
+        border-radius: 12px;
+    }
+
+    .badge-info {
+        background: linear-gradient(45deg, #3498db, #2980b9) !important;
+    }
+
+    .badge-success {
+        background: linear-gradient(45deg, #27ae60, #2ecc71) !important;
+    }
+
+    .badge-secondary {
+        background: linear-gradient(45deg, #95a5a6, #7f8c8d) !important;
+    }
+
+    /* Fix for action buttons */
+    .action-buttons .btn {
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .action-buttons .btn:hover {
+        transform: translateY(-2px);
+    }
+
+    /* Fix for table responsiveness */
+    @media (max-width: 768px) {
+        .table-responsive {
+            border: none;
+            box-shadow: none;
+        }
+        
+        .enhanced-table {
+            font-size: 0.8rem;
+        }
+        
+        .action-buttons {
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .action-btn {
+            font-size: 0.7rem;
+            padding: 6px 10px;
+        }
+    }
+
+    /* Fix for reason display truncation */
+    .reason-display {
+        max-width: 200px;
+        word-wrap: break-word;
+        overflow: hidden;
+    }
+
+    /* Loading state for buttons */
+    .btn-loading {
+        opacity: 0.6;
+        pointer-events: none;
+    }
+
+    .btn-loading::after {
+        content: '';
+        width: 16px;
+        height: 16px;
+        border: 2px solid transparent;
+        border-top: 2px solid white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        display: inline-block;
+        margin-left: 8px;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
+
+<div class="request-dashboard">
+    <div class="container">
+        <div class="dashboard-header">
+            <h1><i class="fas fa-clipboard-list"></i> Blood Request Management</h1>
+            <p>Process and Manage Blood Requests</p>
+        </div>
+
+        <!-- Display messages at the top -->
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert" style="white-space: pre-line; margin-bottom: 20px;">
+                    {{ message }}
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        {% if blood_requests %}
+        <div class="table-container">
+            <h4 class="table-title">
+                <i class="fas fa-list-alt"></i> Pending Blood Requests ({{ total_pending }} requests, {{ total_pending_units }}ml total)
+            </h4>
+            
+            <div class="table-responsive">
+                <table class="table enhanced-table">
+                    <thead>
+                        <tr>
+                            <th scope="col"><i class="fas fa-hashtag"></i> ID</th>
+                            <th scope="col"><i class="fas fa-user"></i> Patient Name</th>
+                            <th scope="col"><i class="fas fa-calendar-alt"></i> Age</th>
+                            <th scope="col"><i class="fas fa-stethoscope"></i> Reason</th>
+                            <th scope="col"><i class="fas fa-tint"></i> Blood Group</th>
+                            <th scope="col"><i class="fas fa-flask"></i> Unit (ml)</th>
+                            <th scope="col"><i class="fas fa-clock"></i> Request Date</th>
+                            <th scope="col"><i class="fas fa-user-tag"></i> Requested By</th>
+                            <th scope="col"><i class="fas fa-info-circle"></i> Status</th>
+                            <th scope="col"><i class="fas fa-cogs"></i> Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for blood_request in blood_requests %}
+                        <tr>
+                            <td class="request-id">#{{ blood_request.id }}</td>
+                            <td class="patient-name">{{ blood_request.patient_name }}</td>
+                            <td class="age-display">{{ blood_request.patient_age }} years</td>
+                            <td class="reason-display">{{ blood_request.reason|truncatechars:50 }}</td>
+                            <td><span class="blood-group-badge">{{ blood_request.bloodgroup }}</span></td>
+                            <td class="unit-display">{{ blood_request.unit }} ml</td>
+                            <td class="date-display">{{ blood_request.date|date:"M d, Y" }}</td>
+                            <td class="requester-info">
+                                {% if blood_request.patient %}
+                                    <span class="badge badge-info">
+                                        <i class="fas fa-user-injured"></i> {{ blood_request.patient.get_name }}
+                                    </span>
+                                {% elif blood_request.request_by_donor %}
+                                    <span class="badge badge-success">
+                                        <i class="fas fa-heart"></i> {{ blood_request.request_by_donor.get_name }}
+                                    </span>
+                                {% else %}
+                                    <span class="badge badge-secondary">
+                                        <i class="fas fa-question"></i> Unknown
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="status-label status-pending">
+                                    <i class="fas fa-clock"></i> {{ blood_request.status }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn action-btn btn-approve">
+                                        <a href="{% url 'approve-request' blood_request.id %}" onclick="return confirm('Are you sure you want to APPROVE this blood request? This will deduct blood from stock.')">
+                                            <i class="fas fa-check"></i> Approve
+                                        </a>
+                                    </button>
+                                    <button class="btn action-btn btn-reject">
+                                        <a href="{% url 'reject-request' blood_request.id %}" onclick="return confirm('Are you sure you want to REJECT this blood request? No blood will be deducted from stock.')">
+                                            <i class="fas fa-times"></i> Reject
+                                        </a>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="table-container">
+            <div class="no-request-message">
+                <i class="fas fa-inbox" style="font-size: 3rem; margin-bottom: 20px; display: block; color: white;"></i>
+                <h4>No Pending Blood Requests</h4>
+                <p>All blood requests have been processed. Check the request history for completed requests.</p>
+                <a href="{% url 'admin-request-history' %}" class="btn btn-primary mt-3" style="background: linear-gradient(45deg, #27ae60, #2ecc71); border: none; padding: 12px 25px; border-radius: 20px; color: white; text-decoration: none; font-weight: 600;">
+                    <i class="fas fa-history"></i> View Request History
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function confirmApproval(patientName, bloodGroup, units) {
+    return confirm('Are you sure you want to APPROVE this blood request?\n\nPatient: ' + patientName + '\nBlood Group: ' + bloodGroup + '\nUnits: ' + units + 'ml\n\nThis will deduct blood from stock.');
+}
+
+function confirmRejection(patientName, bloodGroup, units) {
+    return confirm('Are you sure you want to REJECT this blood request?\n\nPatient: ' + patientName + '\nBlood Group: ' + bloodGroup + '\nUnits: ' + units + 'ml\n\nNo blood will be deducted from stock.');
+}
+</script>
+{% endblock content %}

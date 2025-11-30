@@ -1,0 +1,67 @@
+{% extends 'blood/adminbase.html' %}
+{% load widget_tweaks %}
+{% block content %}
+
+<div class="container mt-4">
+    <h2>Update Donor</h2>
+    
+    <div class="card">
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                
+                <h4>User Information</h4>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>First Name</label>
+                            {% render_field userForm.first_name class="form-control" %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Last Name</label>
+                            {% render_field userForm.last_name class="form-control" %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Username</label>
+                    {% render_field userForm.username class="form-control" %}
+                </div>
+
+                <h4>Donor Information</h4>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Blood Group</label>
+                            {% render_field donorForm.bloodgroup class="form-control" %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Mobile</label>
+                            {% render_field donorForm.mobile class="form-control" %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Address</label>
+                    {% render_field donorForm.address class="form-control" %}
+                </div>
+
+                <div class="form-group">
+                    <label>Profile Picture</label>
+                    {% render_field donorForm.profile_pic class="form-control-file" %}
+                </div>
+
+                <button type="submit" class="btn btn-primary">Update Donor</button>
+                <a href="/admin-donor" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}

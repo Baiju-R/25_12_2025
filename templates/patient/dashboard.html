@@ -1,0 +1,83 @@
+{% extends 'patient/patientbase.html' %}
+{% block content %}
+
+<div class="container mt-4">
+    <h2>Patient Dashboard</h2>
+    
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h4>{{ total_requests }}</h4>
+                    <p>Total Requests</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h4>{{ pending_requests }}</h4>
+                    <p>Pending Requests</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h4>{{ approved_requests }}</h4>
+                    <p>Approved Requests</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <h4>Recent Requests</h4>
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Patient Name</th>
+                        <th>Blood Group</th>
+                        <th>Unit</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for request in recent_requests %}
+                    <tr>
+                        <td>{{ request.patient_name }}</td>
+                        <td>{{ request.bloodgroup }}</td>
+                        <td>{{ request.unit }} ml</td>
+                        <td>{{ request.date }}</td>
+                        <td>
+                            <span class="badge badge-{% if request.status == 'Approved' %}success{% elif request.status == 'Rejected' %}danger{% else %}warning{% endif %}">
+                                {{ request.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <h4>Quick Actions</h4>
+        <div class="row">
+            <div class="col-md-6">
+                <a href="/patient/make-request/" class="btn btn-primary btn-block">
+                    <i class="fas fa-plus-circle"></i> Make New Request
+                </a>
+            </div>
+            <div class="col-md-6">
+                <a href="/patient/my-request/" class="btn btn-secondary btn-block">
+                    <i class="fas fa-history"></i> View Request History
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}
