@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from pathlib import Path
 import os
 
+import dj_database_url
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -20,12 +22,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-xp^wz=i&8%o*%@2)7#k-7w7fhxcxgxq(4kw)nkc$#oj&6d^xp9'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-xp^wz=i&8%o*%@2)7#k-7w7fhxcxgxq(4kw)nkc$#oj&6d^xp9')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
 
 
 # Application definition
@@ -37,14 +39,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'blood',
-    'donor',
+    'blood.apps.BloodConfig',
+    'donor.apps.DonorConfig',
     'patient',
     'widget_tweaks',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -83,13 +86,10 @@ WSGI_APPLICATION = 'bloodbankmanagement.wsgi.application'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        'OPTIONS': {
-            'timeout': 20,
-        },
-    }
+    'default': dj_database_url.config(
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        conn_max_age=600
+    )
 }
 
 
@@ -115,7 +115,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'en'
 
 TIME_ZONE = 'UTC'
 
@@ -129,6 +129,7 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
@@ -190,4 +191,36 @@ LOGGING = {
         },
     },
 }
+
+# Geocoding defaults
+GEOCODER_ALLOW_REMOTE = os.getenv('GEOCODER_ALLOW_REMOTE', 'true').lower() == 'true'
+GEOCODER_COUNTRY_BIAS = os.getenv('GEOCODER_COUNTRY_BIAS', 'in') or None
+GEOCODER_USER_AGENT = os.getenv('GEOCODER_USER_AGENT', 'bloodbridge-geocoder')
+GEOCODER_TIMEOUT = int(os.getenv('GEOCODER_TIMEOUT', '10'))
+GEOCODER_MIN_DELAY_SECONDS = float(os.getenv('GEOCODER_MIN_DELAY_SECONDS', '1.0'))
+GEOCODER_STATIC_FIXTURES = {
+    '221b baker street': (51.523771, -0.158539),
+    'test address': (12.971599, 77.594566),
+    'delhi, india': (28.613939, 77.209023),
+    'mumbai, india': (19.076090, 72.877426),
+}
+
+# AWS SNS configuration for urgent SMS alerts
+AWS_SNS_ENABLED = os.getenv('AWS_SNS_ENABLED', 'false').lower() == 'true'
+AWS_SNS_REGION = os.getenv('AWS_SNS_REGION', 'ap-south-1')
+AWS_SNS_DEFAULT_COUNTRY_CODE = os.getenv('AWS_SNS_DEFAULT_COUNTRY_CODE', '+91')
+AWS_SNS_SENDER_ID = os.getenv('AWS_SNS_SENDER_ID', 'BLDBRDG')
+AWS_SNS_MAX_RECIPIENTS = int(os.getenv('AWS_SNS_MAX_RECIPIENTS', '25'))
+AWS_SNS_MIN_NOTIFICATION_GAP_SECONDS = int(os.getenv('AWS_SNS_MIN_NOTIFICATION_GAP_SECONDS', '1800'))
+AWS_SNS_SMS_TYPE = os.getenv('AWS_SNS_SMS_TYPE', 'Transactional')
+
+if not DEBUG:
+    CSRF_TRUSTED_ORIGINS = ['https://' + host for host in ALLOWED_HOSTS if host not in ('127.0.0.1', 'localhost')]
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
 

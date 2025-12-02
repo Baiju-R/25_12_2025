@@ -217,6 +217,7 @@
         .sidebar .fa-sync-alt { color: #9b59b6; }
         .sidebar .fa-history { color: #e67e22; }
         .sidebar .fa-hand-holding-water { color: #1abc9c; }
+    .sidebar .fa-trophy { color: #f1c40f; }
 
         /* Mobile Menu Toggle */
         .mobile-menu-toggle {
@@ -300,10 +301,13 @@
                 <li><a href="/admin-dashboard"><i class="fas fa-home"></i> Dashboard</a></li>
                 <li><a href="/admin-blood"><i class="fas fa-tint"></i> Blood Stock</a></li>
                 <li><a href="/admin-donor"><i class="fas fa-users"></i> Donors</a></li>
+                <li><a href="/admin-donor-map"><i class="fas fa-map-marked-alt"></i> Donor Map</a></li>
                 <li><a href="/admin-patient"><i class="fas fa-user-injured"></i> Patients</a></li>
                 <li><a href="/admin-request"><i class="fas fa-hand-holding-medical"></i> Blood Requests</a></li>
                 <li><a href="/admin-request-history"><i class="fas fa-history"></i> Request History</a></li>
                 <li><a href="/admin-donation"><i class="fas fa-hand-holding-water"></i> Donations</a></li>
+                <li><a href="/admin-leadership/"><i class="fas fa-trophy"></i> Leadership</a></li>
+                <li><a href="/admin-analytics"><i class="fas fa-chart-line"></i> Analytics</a></li>
             </ul>
         </div>
         
@@ -329,12 +333,19 @@
         
         // Set active menu item
         const currentPath = window.location.pathname;
-        const menuLinks = document.querySelectorAll('.sidebar a');
-        menuLinks.forEach(link => {
-            if (link.getAttribute('href') === currentPath) {
+        const searchParams = new URLSearchParams(window.location.search);
+        document.querySelectorAll('.sidebar a').forEach(link => {
+            const linkUrl = new URL(link.href, window.location.origin);
+            const requiredPanel = link.dataset.panel;
+            const pathMatches = linkUrl.pathname === currentPath;
+            const panelMatches = requiredPanel ? searchParams.get('panel') === requiredPanel : true;
+            if (pathMatches && panelMatches) {
                 link.parentElement.classList.add('active');
             }
         });
     </script>
+
+    {% block extra_scripts %}{% endblock %}
+    {% include 'blood/faq_button.html' %}
 </body>
 </html>

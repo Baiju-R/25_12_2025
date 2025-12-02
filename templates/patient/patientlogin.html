@@ -218,59 +218,74 @@
             }
         }
 
-        .form-label {
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 10px;
+        .field-meta {
             display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.95rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+            color: #2c3e50;
         }
 
-        .form-label i {
-            color: #3498db;
-            font-size: 1.1rem;
+        .form-label {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .form-helper {
+            font-size: 0.8rem;
+            color: #6b7280;
         }
 
         .input-wrapper {
-            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 2px solid #ecf0f1;
+            border-radius: 15px;
+            padding: 0 18px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+
+        .input-wrapper:focus-within {
+            border-color: #3498db;
+            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.15), 0 8px 25px rgba(52, 152, 219, 0.1);
+            background: #fff;
         }
 
         .input-icon {
-            position: absolute;
-            left: 20px;
-            top: 50%;
-            transform: translateY(-50%);
             color: #7f8c8d;
             font-size: 1.2rem;
-            transition: all 0.3s ease;
-            z-index: 2;
+            width: 38px;
+            height: 38px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(52, 152, 219, 0.12);
+            transition: transform 0.3s ease, color 0.3s ease;
+        }
+
+        .input-wrapper:focus-within .input-icon {
+            color: #3498db;
+            transform: scale(1.05);
         }
 
         .form-control {
-            width: 100%;
-            padding: 16px 20px 16px 55px;
-            border: 2px solid #ecf0f1;
-            border-radius: 15px;
+            border: none;
+            background: transparent;
+            padding: 16px 0;
             font-size: 1rem;
-            transition: all 0.3s ease;
-            background: #f8f9fa;
+            width: 100%;
             font-weight: 500;
+            box-shadow: none;
         }
 
         .form-control:focus {
-            border-color: #3498db;
-            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.15), 0 8px 25px rgba(52, 152, 219, 0.1);
-            background: white;
+            border: none;
+            box-shadow: none;
+            background: transparent;
             outline: none;
-        }
-
-        .form-control:focus + .input-icon {
-            color: #3498db;
-            transform: translateY(-50%) scale(1.1);
         }
 
         .login-btn {
@@ -541,22 +556,24 @@
                     {% csrf_token %}
                     
                     <div class="form-group">
-                        <label class="form-label">
-                            <i class="fas fa-user"></i> Username
-                        </label>
+                        <div class="field-meta">
+                            <span class="form-label">Username</span>
+                            <small class="form-helper">Provided during patient signup</small>
+                        </div>
                         <div class="input-wrapper">
-                            <input type="text" name="username" class="form-control" placeholder="Enter your username" required autofocus>
                             <i class="fas fa-user input-icon"></i>
+                            <input type="text" name="username" class="form-control" placeholder="Enter your username" required autofocus>
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">
-                            <i class="fas fa-lock"></i> Password
-                        </label>
+                        <div class="field-meta">
+                            <span class="form-label">Password</span>
+                            <small class="form-helper">Keep this confidential</small>
+                        </div>
                         <div class="input-wrapper">
-                            <input type="password" name="password" class="form-control" placeholder="Enter your password" required>
                             <i class="fas fa-lock input-icon"></i>
+                            <input type="password" name="password" class="form-control" placeholder="Enter your password" required>
                         </div>
                     </div>
 

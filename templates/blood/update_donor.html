@@ -52,6 +52,33 @@
                     {% render_field donorForm.address class="form-control" %}
                 </div>
 
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Latitude</label>
+                            {% render_field donorForm.latitude class="form-control" placeholder="12.971599" %}
+                            <small class="form-text text-muted">Required with longitude to place this donor on the map.</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Longitude</label>
+                            {% render_field donorForm.longitude class="form-control" placeholder="77.594566" %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <button type="button"
+                        class="btn btn-outline-primary btn-sm js-geo-button"
+                        data-lat-selector="#id_latitude"
+                        data-lng-selector="#id_longitude"
+                        data-status-target="#geoStatusAdmin">
+                        <i class="fas fa-location-arrow"></i> Use my current location
+                    </button>
+                    <small id="geoStatusAdmin" class="d-block mt-2 text-muted">Ideal when editing a donor standing beside you.</small>
+                </div>
+
                 <div class="form-group">
                     <label>Profile Picture</label>
                     {% render_field donorForm.profile_pic class="form-control-file" %}
@@ -65,3 +92,55 @@
 </div>
 
 {% endblock content %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const geoButtons = document.querySelectorAll('.js-geo-button');
+        geoButtons.forEach(button => {
+            const latInput = document.querySelector(button.dataset.latSelector);
+            const lngInput = document.querySelector(button.dataset.lngSelector);
+            const statusEl = document.querySelector(button.dataset.statusTarget);
+            if (!latInput || !lngInput || !statusEl) {
+                return;
+            }
+
+            button.addEventListener('click', () => {
+                if (!navigator.geolocation) {
+                    statusEl.textContent = 'Location services are unavailable in this browser.';
+                    statusEl.classList.add('text-danger');
+                    return;
+                }
+
+                statusEl.textContent = 'Fetching coordinates…';
+                statusEl.classList.remove('text-danger');
+                button.disabled = true;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching...';
+
+                const resetButton = () => {
+                    button.disabled = false;
+                    button.innerHTML = '<i class="fas fa-location-arrow"></i> Use my current location';
+                };
+
+                navigator.geolocation.getCurrentPosition((position) => {
+                    latInput.value = position.coords.latitude.toFixed(6);
+                    lngInput.value = position.coords.longitude.toFixed(6);
+                    statusEl.textContent = 'Done! Coordinates copied into the form.';
+                    statusEl.classList.remove('text-danger');
+                    statusEl.classList.add('text-success');
+                    resetButton();
+                }, (error) => {
+                    const message = {
+                        1: 'Permission denied. Allow access to autofill, or type it manually.',
+                        2: 'Position unavailable. Try again outdoors.',
+                        3: 'Timed out. Please retry.'
+                    }[error.code] || 'Unable to retrieve location.';
+                    statusEl.textContent = message;
+                    statusEl.classList.add('text-danger');
+                    resetButton();
+                }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+            });
+        });
+    });
+</script>
+{% endblock extra_scripts %}

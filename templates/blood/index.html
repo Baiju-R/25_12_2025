@@ -226,6 +226,203 @@
             background: white;
         }
 
+        /* Champions Section */
+        .champions-section {
+            background: linear-gradient(135deg, #0f172a 0%, #1f2937 100%);
+            color: white;
+            padding: 80px 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .champions-section::before {
+            content: '';
+            position: absolute;
+            top: -40px;
+            right: -60px;
+            width: 220px;
+            height: 220px;
+            background: rgba(255, 255, 255, 0.08);
+            filter: blur(0px);
+            border-radius: 50%;
+        }
+
+        .champions-section::after {
+            content: '';
+            position: absolute;
+            bottom: -60px;
+            left: -80px;
+            width: 260px;
+            height: 260px;
+            background: rgba(239, 68, 68, 0.15);
+            border-radius: 50%;
+        }
+
+        .champions-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 2;
+        }
+
+        .champions-heading {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .champions-heading span {
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            font-size: 0.85rem;
+            color: #facc15;
+            display: inline-block;
+            margin-bottom: 12px;
+        }
+
+        .champions-heading h2 {
+            font-size: 2.6rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .champions-heading p {
+            color: rgba(255,255,255,0.8);
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        .champions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 24px;
+        }
+
+        .champion-card {
+            background: rgba(15, 23, 42, 0.75);
+            border-radius: 24px;
+            padding: 30px 24px;
+            border: 1px solid rgba(255,255,255,0.08);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 25px 45px rgba(2, 6, 23, 0.45);
+            backdrop-filter: blur(6px);
+            text-align: center;
+        }
+
+        .champion-card::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(248, 113, 113, 0.6), rgba(59, 130, 246, 0.4));
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+        }
+
+        .champion-rank-badge {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            background: rgba(250, 204, 21, 0.2);
+            color: #fde047;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: inline-flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .champion-avatar {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            margin: 0 auto 15px;
+            overflow: hidden;
+            border: 4px solid rgba(255,255,255,0.3);
+            box-shadow: 0 12px 25px rgba(0, 0, 0, 0.4);
+        }
+
+        .champion-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .champion-name {
+            font-size: 1.35rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .champion-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.1);
+            font-weight: 500;
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+        }
+
+        .champion-metrics {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .champion-metric {
+            flex: 1;
+            background: rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .champion-metric span {
+            display: block;
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+
+        .champion-metric small {
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-size: 0.65rem;
+            color: rgba(255,255,255,0.6);
+        }
+
+        .champions-cta {
+            margin-top: 40px;
+            text-align: center;
+        }
+
+        .champions-cta a {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 28px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #f97316, #ef4444);
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+            box-shadow: 0 12px 30px rgba(239, 68, 68, 0.4);
+        }
+
+        .no-champions {
+            grid-column: 1 / -1;
+            text-align: center;
+            color: rgba(255,255,255,0.75);
+        }
+
         .features-container {
             max-width: 1200px;
             margin: 0 auto;
@@ -366,6 +563,63 @@
                     <i class="fas fa-plus-circle"></i>
                     Request Blood
                 </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Champions Section -->
+    <section class="champions-section">
+        <div class="champions-container">
+            <div class="champions-heading">
+                <span><i class="fas fa-trophy"></i> Hall of Heroes</span>
+                <h2>Top Donors Fueling BloodBridge</h2>
+                <p>We celebrate our most generous donors whose kindness keeps the lifeline flowing across the city.</p>
+            </div>
+            <div class="champions-grid">
+                {% if top_donor_spotlight %}
+                    {% for donor in top_donor_spotlight %}
+                    <article class="champion-card champion-rank-{{ donor.rank }}">
+                        <div class="champion-rank-badge">
+                            <i class="fas fa-medal"></i> #{{ donor.rank }}
+                        </div>
+                        <div class="champion-avatar">
+                            <img src="{{ donor.profile_pic_url }}" alt="{{ donor.name }} profile" loading="lazy">
+                        </div>
+                        <h3 class="champion-name">{{ donor.name }}</h3>
+                        <div class="champion-pill">
+                            <i class="fas fa-tint"></i> {{ donor.bloodgroup }}
+                        </div>
+                        <p style="color: rgba(255,255,255,0.78); margin-bottom: 0;">
+                            {{ donor.donation_count }} donation{{ donor.donation_count|pluralize }} •
+                            <span style="color:#facc15; font-weight:600;">{{ donor.total_units }} ml</span> shared
+                        </p>
+                        <p style="color: rgba(255,255,255,0.6); font-size:0.85rem; margin-top:6px;">
+                            {% if donor.last_donation %}
+                                Last donated on {{ donor.last_donation|date:"d M Y" }}
+                            {% else %}
+                                Awaiting first donation
+                            {% endif %}
+                        </p>
+                        <div class="champion-metrics">
+                            <div class="champion-metric">
+                                <span>{{ donor.donation_count }}</span>
+                                <small>Donations</small>
+                            </div>
+                            <div class="champion-metric">
+                                <span>{{ donor.total_units }}</span>
+                                <small>ML Shared</small>
+                            </div>
+                        </div>
+                    </article>
+                    {% endfor %}
+                {% else %}
+                    <p class="no-champions">No champions yet. Donate now and become our first Hall of Hero!</p>
+                {% endif %}
+            </div>
+            <div class="champions-cta">
+                <a href="/donor/donorsignup/">
+                    <i class="fas fa-heart"></i> Join the Hall of Heroes
+                </a>
             </div>
         </div>
     </section>

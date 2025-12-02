@@ -1,0 +1,1042 @@
+{% extends 'blood/adminbase.html' %}
+{% block content %}
+
+<style>
+    .analytics-shell {
+        padding: 20px 0 60px;
+        color: #1f2933;
+    }
+
+    .analytics-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        gap: 20px;
+    }
+
+    .analytics-head h1 {
+        font-size: 2.2rem;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+
+    .analytics-head p {
+        color: #6b7280;
+        margin: 0;
+    }
+
+    .filters-card {
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 20px 45px rgba(82, 63, 105, 0.1);
+        width: 100%;
+    }
+
+    .filters-card form {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 15px;
+    }
+
+    .filters-card label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #4c566a;
+    }
+
+    .filters-card select,
+    .filters-card input[type="date"] {
+        border-radius: 12px;
+        border: 1px solid #d1d5db;
+        padding: 10px 14px;
+        min-width: 180px;
+        font-weight: 500;
+    }
+
+    .filters-card button {
+        border: none;
+        background: linear-gradient(135deg, #7c3aed, #ec4899);
+        color: #fff;
+        border-radius: 12px;
+        padding: 12px 28px;
+        font-weight: 600;
+        box-shadow: 0 15px 30px rgba(124, 58, 237, 0.35);
+    }
+
+    .custom-range-fields {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .custom-range-fields.hidden {
+        display: none;
+    }
+
+    .compare-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        color: #4338ca;
+    }
+
+    .summary-grid {
+        margin-top: 30px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 20px;
+    }
+
+    .summary-card {
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 24px;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 25px 40px rgba(15, 23, 42, 0.08);
+    }
+
+    .summary-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 1.2rem;
+        margin-bottom: 16px;
+    }
+
+    .summary-icon.accent-pink {
+        background: linear-gradient(135deg, #f472b6, #fb7185);
+        box-shadow: 0 10px 25px rgba(251, 113, 133, 0.4);
+    }
+
+    .summary-icon.accent-green {
+        background: linear-gradient(135deg, #4ade80, #16a34a);
+        box-shadow: 0 10px 25px rgba(74, 222, 128, 0.4);
+    }
+
+    .summary-icon.accent-gold {
+        background: linear-gradient(135deg, #facc15, #f97316);
+        box-shadow: 0 10px 25px rgba(250, 204, 21, 0.4);
+    }
+
+    .summary-icon.accent-indigo {
+        background: linear-gradient(135deg, #818cf8, #4f46e5);
+        box-shadow: 0 10px 25px rgba(99, 102, 241, 0.4);
+    }
+
+    .summary-card h4 {
+        font-size: 0.95rem;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        color: #9ca3af;
+        margin-bottom: 8px;
+    }
+
+    .summary-value {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: #111827;
+    }
+
+    .summary-subtitle {
+        color: #6b7280;
+    }
+
+    .insight-deck {
+        margin-top: 50px;
+    }
+
+    .deck-heading {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 20px;
+        margin-bottom: 16px;
+    }
+
+    .deck-tabs {
+        display: flex;
+        gap: 12px;
+        overflow-x: auto;
+        padding-bottom: 6px;
+    }
+
+    .deck-tabs button {
+        border: none;
+        background: rgba(226, 232, 240, 0.6);
+        color: #1f2937;
+        padding: 10px 18px;
+        border-radius: 999px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        transition: all 0.2s ease;
+        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.3);
+    }
+
+    .deck-tabs button.active {
+        background: linear-gradient(135deg, #4f46e5, #ec4899);
+        color: #fff;
+        box-shadow: 0 12px 30px rgba(79, 70, 229, 0.25);
+    }
+
+    .deck-panel {
+        display: none;
+        margin-top: 20px;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 24px;
+        animation: fadeIn 0.4s ease;
+    }
+
+    .deck-panel.active {
+        display: grid;
+    }
+
+    .chart-card.span-2 {
+        grid-column: span 2;
+    }
+
+    .chart-card {
+        background: #ffffff;
+        border-radius: 24px;
+        padding: 24px;
+        box-shadow: 0 25px 45px rgba(2, 6, 23, 0.08);
+    }
+
+    .leaderboard-card {
+        background: radial-gradient(circle at top left, rgba(79, 70, 229, 0.12), rgba(30, 27, 75, 0.08)), #fff;
+        border: 1px solid rgba(99, 102, 241, 0.15);
+    }
+
+    .leaderboard-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        gap: 12px;
+    }
+
+    .leaderboard-subtitle {
+        font-size: 0.95rem;
+        color: #6b7280;
+    }
+
+    .leaderboard-list {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .leaderboard-row {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(248, 250, 252, 0.85);
+        border: 1px solid rgba(226, 232, 240, 0.6);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .leaderboard-row:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 25px rgba(15, 23, 42, 0.1);
+    }
+
+    .leaderboard-row.highlight {
+        background: linear-gradient(135deg, #fde68a, #f97316);
+        color: #78350f;
+        border-color: transparent;
+        box-shadow: 0 15px 35px rgba(249, 115, 22, 0.25);
+    }
+
+    .leaderboard-rank {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #6366f1;
+        min-width: 40px;
+        text-align: center;
+    }
+
+    .leaderboard-row.highlight .leaderboard-rank {
+        color: #b45309;
+    }
+
+    .leaderboard-avatar {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        overflow: hidden;
+        border: 3px solid #fff;
+        box-shadow: 0 6px 15px rgba(15, 23, 42, 0.25);
+        background: #fff;
+        flex-shrink: 0;
+    }
+
+    .leaderboard-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .leaderboard-info h4 {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: inherit;
+    }
+
+    .leaderboard-info p {
+        margin: 4px 0 0;
+        color: rgba(15, 23, 42, 0.7);
+        font-size: 0.9rem;
+    }
+
+    .leaderboard-row.highlight .leaderboard-info p {
+        color: rgba(120, 53, 15, 0.85);
+    }
+
+    .leaderboard-meta {
+        font-size: 0.8rem;
+        color: #94a3b8;
+    }
+
+    .leaderboard-row.highlight .leaderboard-meta {
+        color: rgba(120, 53, 15, 0.8);
+    }
+
+    .leaderboard-units {
+        margin-left: auto;
+        text-align: right;
+    }
+
+    .leaderboard-units span {
+        display: block;
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+
+    .chart-card .chart-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+
+    .chart-card .chart-actions button {
+        border: none;
+        border-radius: 10px;
+        padding: 6px 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        background: #e2e8f0;
+        color: #334155;
+    }
+
+    .chart-card .chart-actions button.active {
+        background: #4f46e5;
+        color: #fff;
+        box-shadow: 0 10px 20px rgba(79, 70, 229, 0.3);
+    }
+
+    .chart-card h3 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 16px;
+        color: #1f2937;
+    }
+
+    .comparison-panel {
+        margin-top: 40px;
+        background: linear-gradient(135deg, #312e81, #1e1b4b);
+        border-radius: 26px;
+        padding: 28px;
+        color: #f8fafc;
+        box-shadow: 0 35px 60px rgba(49, 46, 129, 0.4);
+    }
+
+    .comparison-panel h3 {
+        margin-bottom: 16px;
+        font-size: 1.2rem;
+    }
+
+    .comparison-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .comparison-table th,
+    .comparison-table td {
+        padding: 12px 8px;
+        text-align: left;
+    }
+
+    .comparison-table th {
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-size: 0.8rem;
+        color: rgba(248, 250, 252, 0.7);
+    }
+
+    .delta-pill {
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .delta-pill.up {
+        background: rgba(16, 185, 129, 0.15);
+        color: #6ee7b7;
+    }
+
+    .delta-pill.down {
+        background: rgba(248, 113, 113, 0.15);
+        color: #fecaca;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .alert-fallback {
+        margin-top: 20px;
+        background: linear-gradient(135deg, #fde68a, #f97316);
+        border-radius: 18px;
+        padding: 18px 22px;
+        color: #78350f;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        box-shadow: 0 20px 35px rgba(249, 115, 22, 0.25);
+    }
+
+    .alert-fallback i {
+        font-size: 1.4rem;
+    }
+
+    canvas {
+        width: 100% !important;
+        height: 320px !important;
+    }
+
+    @media (max-width: 768px) {
+        .filters-card form {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        canvas {
+            height: 260px !important;
+        }
+
+        .chart-card.span-2 {
+            grid-column: span 1;
+        }
+
+        .leaderboard-row {
+            flex-wrap: wrap;
+            text-align: center;
+        }
+
+        .leaderboard-units {
+            width: 100%;
+            margin-top: 10px;
+            text-align: center;
+        }
+    }
+</style>
+
+<div class="analytics-shell">
+    <div class="analytics-head">
+        <div>
+            <h1><i class="fas fa-chart-area text-danger"></i> Intelligence & Analytics</h1>
+            <p>Viewing insights for <strong>{{ date_range_label }}</strong></p>
+        </div>
+    </div>
+
+    {% if fallback_applied %}
+    <div class="alert-fallback">
+        <i class="fas fa-info-circle"></i>
+        <span>{{ fallback_message }}</span>
+    </div>
+    {% endif %}
+
+    <div class="filters-card">
+        <form method="get">
+            <div>
+                <label>Preset Range</label>
+                <select name="range" id="rangeSelect">
+                    <option value="7d" {% if range_param == '7d' %}selected{% endif %}>Last 7 Days</option>
+                    <option value="30d" {% if range_param == '30d' %}selected{% endif %}>Last 30 Days</option>
+                    <option value="90d" {% if range_param == '90d' %}selected{% endif %}>Last 90 Days</option>
+                    <option value="365d" {% if range_param == '365d' %}selected{% endif %}>Last 12 Months</option>
+                    <option value="custom" {% if range_param == 'custom' %}selected{% endif %}>Custom Range</option>
+                </select>
+            </div>
+            <div class="custom-range-fields {% if range_param != 'custom' %}hidden{% endif %}" id="customRange">
+                <div>
+                    <label>From</label>
+                    <input type="date" name="start_date" value="{{ start_date_value }}">
+                </div>
+                <div>
+                    <label>To</label>
+                    <input type="date" name="end_date" value="{{ end_date_value }}">
+                </div>
+            </div>
+            <label class="compare-toggle">
+                <input type="checkbox" name="compare" value="previous" {% if compare_enabled %}checked{% endif %}>
+                Compare with previous window
+            </label>
+            <button type="submit">Update Insights</button>
+        </form>
+    </div>
+
+    <div class="summary-grid">
+        {% for card in summary_cards %}
+        <div class="summary-card">
+            <div class="summary-icon {{ card.accent_class|default:'accent-pink' }}">
+                <i class="fas {{ card.icon }}"></i>
+            </div>
+            <h4>{{ card.title }}</h4>
+            <div class="summary-value">{{ card.value }}</div>
+            <p class="summary-subtitle">{{ card.subtitle }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if compare_enabled and comparison_rows %}
+    <div class="comparison-panel">
+        <h3><i class="fas fa-exchange-alt"></i> Period-over-Period Movement</h3>
+        <div class="table-responsive">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Current</th>
+                        <th>Previous</th>
+                        <th>Δ %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in comparison_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.current }}</td>
+                        <td>{{ row.previous }}</td>
+                        <td>
+                            <span class="delta-pill {{ row.trend }}">
+                                {% if row.trend == 'up' %}
+                                    <i class="fas fa-arrow-up"></i>
+                                {% else %}
+                                    <i class="fas fa-arrow-down"></i>
+                                {% endif %}
+                                {{ row.delta }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="insight-deck">
+        <div class="deck-heading">
+            <div>
+                <h2 style="font-size:1.4rem;">Visualization Gallery</h2>
+                <p>Navigate themed canvases to explore demand, supply, inventory, and community health.</p>
+            </div>
+            <div class="deck-tabs" id="deckTabs">
+                <button type="button" data-panel="overview" class="{% if active_panel == 'overview' %}active{% endif %}">Overview</button>
+                <button type="button" data-panel="operations" class="{% if active_panel == 'operations' %}active{% endif %}">Operations</button>
+                <button type="button" data-panel="inventory" class="{% if active_panel == 'inventory' %}active{% endif %}">Inventory</button>
+                <button type="button" data-panel="community" class="{% if active_panel == 'community' %}active{% endif %}">Community</button>
+            </div>
+        </div>
+
+        <section class="deck-panel {% if active_panel == 'overview' %}active{% endif %}" data-panel="overview">
+            <div class="chart-card span-2">
+                <h3>Demand vs Supply</h3>
+                <canvas id="timelineChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h3>Request Channel Mix</h3>
+                    <div class="chart-actions" id="channelToggle">
+                        <button type="button" data-mode="counts" class="active">Count</button>
+                        <button type="button" data-mode="units">Units (ml)</button>
+                    </div>
+                </div>
+                <canvas id="channelChart"></canvas>
+            </div>
+        </section>
+
+    <section class="deck-panel {% if active_panel == 'operations' %}active{% endif %}" data-panel="operations">
+            <div class="chart-card span-2">
+                <h3>Monthly Throughput (last 6 months)</h3>
+                <canvas id="monthlyChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Net Movement (Donations − Allocations)</h3>
+                <canvas id="netFlowChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Status Velocity Over Time</h3>
+                <canvas id="statusTimelineChart"></canvas>
+            </div>
+        </section>
+
+    <section class="deck-panel {% if active_panel == 'inventory' %}active{% endif %}" data-panel="inventory">
+            <div class="chart-card">
+                <h3>Blood Group Balance</h3>
+                <canvas id="bloodGroupChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Approval Mix</h3>
+                <canvas id="statusChart"></canvas>
+            </div>
+        </section>
+
+    <section class="deck-panel {% if active_panel == 'community' %}active{% endif %}" data-panel="community">
+            <div class="chart-card leaderboard-card span-2">
+                <div class="leaderboard-header">
+                    <div>
+                        <h3>Donor Hall of Fame</h3>
+                        <p class="leaderboard-subtitle">Celebrating the most generous heroes in this window</p>
+                    </div>
+                    <span class="badge badge-warning" style="background: rgba(251, 191, 36, 0.2); color: #b45309; border-radius: 999px; padding: 6px 14px; font-weight: 600;">
+                        <i class="fas fa-trophy"></i> Top {{ top_donor_cards|length }}
+                    </span>
+                </div>
+                <div class="leaderboard-list">
+                    {% if top_donor_cards %}
+                        {% for donor in top_donor_cards %}
+                        <div class="leaderboard-row {% if donor.rank == 1 %}highlight{% endif %}">
+                            <div class="leaderboard-rank">#{{ donor.rank }}</div>
+                            <div class="leaderboard-avatar">
+                                <img src="{{ donor.profile_pic_url }}" alt="{{ donor.name }} profile">
+                            </div>
+                            <div class="leaderboard-info">
+                                <h4>{{ donor.name }}</h4>
+                                <p>{{ donor.bloodgroup }} • {{ donor.donation_count }} donation{{ donor.donation_count|pluralize }}</p>
+                                <span class="leaderboard-meta">
+                                    {% if donor.last_donation %}
+                                        Last donation {{ donor.last_donation|date:"d M Y" }}
+                                    {% else %}
+                                        Awaiting first donation
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="leaderboard-units">
+                                <span>{{ donor.units|floatformat:0 }} ml</span>
+                                <small>Total units</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted mb-0">No donations in this window yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+                <div class="chart-card">
+                    <h3>Top Requesters</h3>
+                    <canvas id="requesterChart"></canvas>
+                </div>
+        </section>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    const timelineData = JSON.parse('{{ timeline_data|escapejs }}');
+    const netFlowData = JSON.parse('{{ net_flow_data|escapejs }}');
+    const statusData = JSON.parse('{{ status_data|escapejs }}');
+    const statusTimelineData = JSON.parse('{{ status_timeline_data|escapejs }}');
+    const bloodGroupData = JSON.parse('{{ blood_group_data|escapejs }}');
+    const channelMixData = JSON.parse('{{ channel_mix_data|escapejs }}');
+    const monthlySummaryData = JSON.parse('{{ monthly_summary_data|escapejs }}');
+    const requesterData = JSON.parse('{{ top_requesters_data|escapejs }}');
+
+    const deckTabs = document.getElementById('deckTabs');
+    if (deckTabs) {
+        const deckButtons = deckTabs.querySelectorAll('button');
+        const deckPanels = document.querySelectorAll('.deck-panel');
+        const initialPanel = '{{ active_panel }}';
+
+        const activatePanel = (panelName) => {
+            deckButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.panel === panelName));
+            deckPanels.forEach(panel => {
+                panel.classList.toggle('active', panel.dataset.panel === panelName);
+            });
+        };
+
+        deckButtons.forEach(btn => {
+            btn.addEventListener('click', () => activatePanel(btn.dataset.panel));
+        });
+
+        activatePanel(initialPanel);
+    }
+
+    const withFallback = (data) => {
+        if (!data || !data.length) {
+            return [{ name: 'No data yet', units: 0 }];
+        }
+        return data;
+    };
+
+    const gradientFactory = (ctx, ...colors) => {
+        const gradient = ctx.createLinearGradient(0, 0, ctx.canvas.width, 0);
+        const step = 1 / (colors.length - 1 || 1);
+        colors.forEach((color, index) => {
+            gradient.addColorStop(step * index, color);
+        });
+        return gradient;
+    };
+
+    const timelineCtx = document.getElementById('timelineChart').getContext('2d');
+    new Chart(timelineCtx, {
+        type: 'line',
+        data: {
+            labels: timelineData.labels,
+            datasets: [
+                {
+                    label: 'Requests (ml)',
+                    data: timelineData.requests,
+                    borderColor: gradientFactory(timelineCtx, '#fb7185', '#f97316'),
+                    backgroundColor: 'rgba(251, 113, 133, 0.12)',
+                    tension: 0.35,
+                    fill: true,
+                    borderWidth: 3,
+                },
+                {
+                    label: 'Donations (ml)',
+                    data: timelineData.donations,
+                    borderColor: gradientFactory(timelineCtx, '#34d399', '#22d3ee'),
+                    backgroundColor: 'rgba(52, 211, 153, 0.15)',
+                    tension: 0.35,
+                    fill: true,
+                    borderWidth: 3,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(15, 23, 42, 0.08)' }
+                },
+                x: {
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+
+    const statusCtx = document.getElementById('statusChart').getContext('2d');
+    new Chart(statusCtx, {
+        type: 'bar',
+        data: {
+            labels: statusData.labels,
+            datasets: [
+                {
+                    label: 'Requests',
+                    data: statusData.requests,
+                    backgroundColor: ['#34d399', '#fbbf24', '#f87171'],
+                    borderRadius: 14,
+                },
+                {
+                    label: 'Donations',
+                    data: statusData.donations,
+                    backgroundColor: ['#60a5fa', '#f472b6', '#fca5a5'],
+                    borderRadius: 14,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom' } },
+            scales: {
+                x: { stacked: true },
+                y: { beginAtZero: true, stacked: true }
+            }
+        }
+    });
+
+    const bloodCtx = document.getElementById('bloodGroupChart').getContext('2d');
+    new Chart(bloodCtx, {
+        type: 'radar',
+        data: {
+            labels: bloodGroupData.labels,
+            datasets: [
+                {
+                    label: 'Requests (ml)',
+                    data: bloodGroupData.requests,
+                    backgroundColor: 'rgba(251, 113, 133, 0.15)',
+                    borderColor: '#fb7185',
+                    borderWidth: 2,
+                },
+                {
+                    label: 'Donations (ml)',
+                    data: bloodGroupData.donations,
+                    backgroundColor: 'rgba(52, 211, 153, 0.15)',
+                    borderColor: '#34d399',
+                    borderWidth: 2,
+                },
+                {
+                    label: 'Stock (ml)',
+                    data: bloodGroupData.stock,
+                    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+                    borderColor: '#60a5fa',
+                    borderWidth: 2,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            elements: {
+                line: { borderWidth: 2 }
+            }
+        }
+    });
+
+    const requesterCtx = document.getElementById('requesterChart').getContext('2d');
+    const safeRequesters = withFallback(requesterData);
+    new Chart(requesterCtx, {
+        type: 'bar',
+        data: {
+            labels: safeRequesters.map(item => item.name),
+            datasets: [
+                {
+                    label: 'Units Requested',
+                    data: safeRequesters.map(item => item.units),
+                    backgroundColor: '#f472b6',
+                    borderRadius: 12,
+                }
+            ]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true } }
+        }
+    });
+
+
+    const netCtx = document.getElementById('netFlowChart').getContext('2d');
+    new Chart(netCtx, {
+        type: 'line',
+        data: {
+            labels: netFlowData.labels,
+            datasets: [
+                {
+                    label: 'Cumulative Net Movement (ml)',
+                    data: netFlowData.net,
+                    borderColor: '#a855f7',
+                    backgroundColor: 'rgba(168, 85, 247, 0.15)',
+                    fill: true,
+                    tension: 0.35,
+                    borderWidth: 3,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom' } },
+            scales: {
+                y: { beginAtZero: true },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+
+    const statusTimelineCtx = document.getElementById('statusTimelineChart').getContext('2d');
+    const statusTimelineDatasets = Object.entries(statusTimelineData.series).map(([status, values]) => {
+        const palette = {
+            Approved: '#34d399',
+            Pending: '#fbbf24',
+            Rejected: '#f87171'
+        };
+        return {
+            label: status,
+            data: values,
+            fill: true,
+            tension: 0.3,
+            backgroundColor: palette[status] + '33',
+            borderColor: palette[status],
+            borderWidth: 2,
+        };
+    });
+    new Chart(statusTimelineCtx, {
+        type: 'line',
+        data: {
+            labels: statusTimelineData.labels,
+            datasets: statusTimelineDatasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            stacked: true,
+            plugins: { legend: { position: 'bottom' } },
+            scales: {
+                y: { beginAtZero: true },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+
+    const channelCtx = document.getElementById('channelChart').getContext('2d');
+    const channelColors = ['#6366f1', '#ec4899', '#14b8a6'];
+    const buildChannelDataset = (mode = 'counts') => ({
+        labels: channelMixData.labels,
+        datasets: [
+            {
+                data: channelMixData[mode],
+                backgroundColor: channelColors,
+            }
+        ]
+    });
+    let currentChannelMode = 'counts';
+    const channelChart = new Chart(channelCtx, {
+        type: 'doughnut',
+        data: buildChannelDataset(),
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+    const channelToggle = document.getElementById('channelToggle');
+    if (channelToggle) {
+        channelToggle.querySelectorAll('button').forEach(button => {
+            button.addEventListener('click', () => {
+                const mode = button.dataset.mode;
+                if (mode === currentChannelMode) return;
+                currentChannelMode = mode;
+                channelToggle.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                channelChart.data = buildChannelDataset(mode);
+                channelChart.update();
+            });
+        });
+    }
+
+    const monthlyCtx = document.getElementById('monthlyChart').getContext('2d');
+    new Chart(monthlyCtx, {
+        data: {
+            labels: monthlySummaryData.labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Requests (count)',
+                    data: monthlySummaryData.request_counts,
+                    backgroundColor: '#fb7185',
+                    borderRadius: 10,
+                    yAxisID: 'y',
+                },
+                {
+                    type: 'bar',
+                    label: 'Donations (count)',
+                    data: monthlySummaryData.donation_counts,
+                    backgroundColor: '#34d399',
+                    borderRadius: 10,
+                    yAxisID: 'y',
+                },
+                {
+                    type: 'line',
+                    label: 'Requests (ml)',
+                    data: monthlySummaryData.request_units,
+                    borderColor: '#f97316',
+                    backgroundColor: 'rgba(249, 115, 22, 0.15)',
+                    yAxisID: 'y1',
+                    tension: 0.3,
+                    fill: true,
+                },
+                {
+                    type: 'line',
+                    label: 'Donations (ml)',
+                    data: monthlySummaryData.donation_units,
+                    borderColor: '#60a5fa',
+                    backgroundColor: 'rgba(96, 165, 250, 0.15)',
+                    yAxisID: 'y1',
+                    tension: 0.3,
+                    fill: true,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom' } },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    position: 'left',
+                    title: { display: true, text: 'Counts' }
+                },
+                y1: {
+                    beginAtZero: true,
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    title: { display: true, text: 'Units (ml)' }
+                }
+            }
+        }
+    });
+
+    const rangeSelect = document.getElementById('rangeSelect');
+    const customRange = document.getElementById('customRange');
+    const toggleCustomRange = () => {
+        if (!rangeSelect || !customRange) return;
+        if (rangeSelect.value === 'custom') {
+            customRange.classList.remove('hidden');
+        } else {
+            customRange.classList.add('hidden');
+        }
+    };
+    if (rangeSelect) {
+        rangeSelect.addEventListener('change', toggleCustomRange);
+        toggleCustomRange();
+    }
+</script>
+
+{% endblock content %}

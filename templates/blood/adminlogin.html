@@ -101,45 +101,67 @@
             position: relative;
         }
 
+        .field-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+        }
+
         .form-label {
             font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 8px;
-            display: block;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            color: #1f2937;
+            font-size: 0.95rem;
         }
 
-        .form-control {
-            width: 100%;
-            padding: 15px 20px 15px 50px;
-            border: 2px solid #ecf0f1;
-            border-radius: 15px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            background: #f8f9fa;
-        }
-
-        .form-control:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-            background: white;
-            outline: none;
-        }
-
-        .input-icon {
-            position: absolute;
-            left: 18px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #7f8c8d;
-            font-size: 1.1rem;
-            z-index: 1;
+        .form-helper {
+            font-size: 0.8rem;
+            color: #6b7280;
         }
 
         .input-wrapper {
-            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 2px solid #ecf0f1;
+            border-radius: 15px;
+            padding: 0 18px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+
+        .input-wrapper:focus-within {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+            background: white;
+        }
+
+        .input-icon {
+            color: #7f8c8d;
+            font-size: 1.1rem;
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(102, 126, 234, 0.08);
+        }
+
+        .form-control {
+            border: none;
+            background: transparent;
+            padding: 15px 0;
+            font-size: 1rem;
+            width: 100%;
+            box-shadow: none;
+        }
+
+        .form-control:focus {
+            border: none;
+            box-shadow: none;
+            background: transparent;
+            outline: none;
         }
 
         .login-btn {
@@ -270,9 +292,10 @@
                     {% csrf_token %}
                     
                     <div class="form-group">
-                        <label class="form-label">
-                            <i class="fas fa-user"></i> Username
-                        </label>
+                        <div class="field-meta">
+                            <span class="form-label">Username</span>
+                            <small class="form-helper">Use your admin credentials</small>
+                        </div>
                         <div class="input-wrapper">
                             <i class="fas fa-user input-icon"></i>
                             <input type="text" name="username" class="form-control" placeholder="Enter your username" required>
@@ -280,9 +303,10 @@
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">
-                            <i class="fas fa-lock"></i> Password
-                        </label>
+                        <div class="field-meta">
+                            <span class="form-label">Password</span>
+                            <small class="form-helper">Minimum 8 characters</small>
+                        </div>
                         <div class="input-wrapper">
                             <i class="fas fa-lock input-icon"></i>
                             <input type="password" name="password" class="form-control" placeholder="Enter your password" required>

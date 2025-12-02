@@ -1,0 +1,272 @@
+{% extends 'blood/adminbase.html' %}
+{% block content %}
+{% load static %}
+
+<style>
+    .map-shell {
+        padding: 20px 0 40px;
+        color: #0f172a;
+    }
+    .map-head {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+    .map-head h1 {
+        margin: 0;
+        font-weight: 700;
+    }
+    .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    .stat-card {
+        background: #fff;
+        border-radius: 20px;
+        padding: 18px;
+        box-shadow: 0 12px 25px rgba(15, 23, 42, 0.08);
+        border: 1px solid rgba(226, 232, 240, 0.7);
+    }
+    .map-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+    }
+    .map-action-form button {
+        border: none;
+        border-radius: 999px;
+        padding: 10px 18px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        cursor: pointer;
+        color: #fff;
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        box-shadow: 0 10px 20px rgba(37, 99, 235, 0.25);
+        transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+    .map-action-form button:hover:enabled {
+        transform: translateY(-2px);
+        opacity: 0.95;
+    }
+    .map-action-form button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+    .stat-card span {
+        text-transform: uppercase;
+        font-size: 0.8rem;
+        letter-spacing: 1px;
+        color: #94a3b8;
+    }
+    .stat-card h3 {
+        margin: 8px 0 0;
+        font-size: 1.8rem;
+    }
+    .folium-map-shell {
+        border-radius: 28px;
+        overflow: hidden;
+        box-shadow: 0 30px 60px rgba(15, 23, 42, 0.15);
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        min-height: 520px;
+    }
+    .folium-map-shell iframe,
+    .folium-map-shell .folium-map {
+        width: 100% !important;
+        height: 520px !important;
+        border: 0;
+    }
+    .map-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+        gap: 24px;
+        margin-top: 28px;
+    }
+    .panel-card {
+        background: #fff;
+        border-radius: 24px;
+        padding: 20px;
+        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+        border: 1px solid rgba(226, 232, 240, 0.8);
+    }
+    .panel-card h3 {
+        font-size: 1.1rem;
+        margin-bottom: 15px;
+        font-weight: 700;
+    }
+    .donor-row {
+        display: grid;
+        grid-template-columns: 1fr 120px 70px;
+        gap: 12px;
+        padding: 14px 0;
+        border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+        align-items: center;
+    }
+    .donor-row:last-child { border-bottom: none; }
+    .badge {
+        border-radius: 999px;
+        padding: 4px 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .badge-verified {
+        background: rgba(16, 185, 129, 0.15);
+        color: #047857;
+    }
+    .badge-pending {
+        background: rgba(251, 191, 36, 0.2);
+        color: #92400e;
+    }
+    .verify-form button {
+        border: none;
+        border-radius: 999px;
+        padding: 6px 14px;
+        font-weight: 600;
+        font-size: 0.8rem;
+        cursor: pointer;
+        color: #fff;
+        transition: all 0.2s ease;
+    }
+    .verify-form .btn-verify { background: linear-gradient(135deg, #10b981, #059669); }
+    .verify-form .btn-reset { background: linear-gradient(135deg, #f97316, #ea580c); }
+    .verify-form button:hover { opacity: 0.9; }
+    .empty-state {
+        text-align: center;
+        padding: 30px;
+        color: #64748b;
+        border: 2px dashed rgba(148, 163, 184, 0.6);
+        border-radius: 20px;
+    }
+    @media (max-width: 992px) {
+        .map-grid { grid-template-columns: 1fr; }
+        .donor-row { grid-template-columns: 1fr; }
+    }
+</style>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-sA+zWATbFveLLNqWO2gtiw3HL/lh1giY/Inf1BJ0z14=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-o9N1j7kGStGkG2zB4J8nS9x+h0P4V9E0s7p3pZp3p3s=" crossorigin=""></script>
+
+<div class="map-shell">
+    <div class="map-head">
+        <div>
+            <h1><i class="fas fa-map-marked-alt text-primary"></i> Donor Geo Verification</h1>
+            <p class="text-muted mb-0">See every donor plotted by their latitude & longitude and confirm physical locations.</p>
+        </div>
+        <div class="map-actions">
+            <span class="badge badge-verified"><i class="fas fa-map-pin"></i> {{ pin_ready }} mapped donors</span>
+            <form method="post" class="map-action-form">
+                {% csrf_token %}
+                <input type="hidden" name="intent" value="bulk_geocode">
+                <input type="hidden" name="limit" value="25">
+                <button type="submit" {% if without_coordinates == 0 %}disabled{% endif %}>
+                    <i class="fas fa-magic"></i> Auto-place missing donors
+                </button>
+                <small class="text-muted">Runs up to 25 addresses per click.</small>
+            </form>
+        </div>
+    </div>
+
+    <div class="stat-grid">
+        <div class="stat-card">
+            <span>Total Donors</span>
+            <h3>{{ total_donors }}</h3>
+        </div>
+        <div class="stat-card">
+            <span>Pins Ready</span>
+            <h3>{{ pin_ready }}</h3>
+        </div>
+        <div class="stat-card">
+            <span>Verified Locations</span>
+            <h3>{{ verified_count }}</h3>
+        </div>
+        <div class="stat-card">
+            <span>Pending Verification</span>
+            <h3>{{ pending_count }}</h3>
+        </div>
+        <div class="stat-card">
+            <span>Missing Coordinates</span>
+            <h3>{{ without_coordinates }}</h3>
+        </div>
+    </div>
+
+    <div class="folium-map-shell">
+        {% if folium_map %}
+            {{ folium_map|safe }}
+        {% elif folium_error %}
+            <div class="empty-state">
+                <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                <p class="mb-1">{{ folium_error }}</p>
+                <small>Run <code>python -m pip install folium</code> inside your virtual environment.</small>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <i class="fas fa-globe fa-2x mb-2"></i>
+                <p class="mb-0">Add at least one donor with coordinates to preview the global map.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="map-grid">
+        <div class="panel-card">
+            <h3><i class="fas fa-users"></i> Donors with Coordinates</h3>
+            {% if pin_ready %}
+                {% for donor in donors %}
+                    {% if donor.latitude and donor.longitude %}
+                        <div class="donor-row">
+                            <div>
+                                <strong>{{ donor.get_name }}</strong>
+                                <div class="text-muted" style="font-size:0.85rem;">@{{ donor.user.username }} • {{ donor.bloodgroup }}</div>
+                                <div class="text-muted" style="font-size:0.85rem;">{{ donor.address }}</div>
+                            </div>
+                            <div>
+                                <span class="badge {% if donor.location_verified %}badge-verified{% else %}badge-pending{% endif %}">
+                                    {% if donor.location_verified %}<i class="fas fa-check"></i> Verified{% else %}<i class="fas fa-hourglass-half"></i> Pending{% endif %}
+                                </span>
+                            </div>
+                            <div>
+                                <form method="post" class="verify-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="donor_id" value="{{ donor.id }}">
+                                    {% if donor.location_verified %}
+                                        <input type="hidden" name="action" value="reset">
+                                        <button type="submit" class="btn-reset">Reset</button>
+                                    {% else %}
+                                        <input type="hidden" name="action" value="verify">
+                                        <button type="submit" class="btn-verify">Verify</button>
+                                    {% endif %}
+                                </form>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-map-pin fa-2x mb-2"></i>
+                    <p class="mb-0">No donors have shared coordinates yet. Encourage them to add latitude & longitude during signup or profile updates.</p>
+                </div>
+            {% endif %}
+        </div>
+        <div class="panel-card">
+            <h3><i class="fas fa-lightbulb"></i> Tips</h3>
+            <ul class="pl-3 mb-0" style="color:#475569;">
+                <li>Use “Auto-place missing donors” to resolve addresses in small batches.</li>
+                <li>Grab coordinates from Google Maps & paste them during donor signup.</li>
+                <li>Admins can edit any donor and fill in lat/long manually.</li>
+                <li>Use the verify button once you confirm a donor's actual location.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+{{ map_data|json_script:"donor-map-data" }}
+{{ map_center|json_script:"map-center-data" }}
+{% endblock content %}

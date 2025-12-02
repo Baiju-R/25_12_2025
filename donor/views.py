@@ -1,11 +1,17 @@
+import logging
+
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group, User
 from django.contrib import messages
 from django.db.models import Sum
+
+from blood.services import sms as sms_service
 from .forms import DonorUserForm, DonorForm
 from .models import Donor, BloodDonate
+
+logger = logging.getLogger(__name__)
 
 def donorsignup_view(request):
     userForm = DonorUserForm()
@@ -310,28 +316,51 @@ def donor_request_blood_view(request):
         messages.error(request, 'Donor profile not found. Please contact support.')
         return redirect('donor-dashboard')
     
+    form_data = {
+        'patient_name': '',
+        'patient_age': '',
+        'reason': '',
+        'bloodgroup': '',
+        'unit': '',
+        'request_zipcode': donor.zipcode or '',
+        'is_urgent': False,
+    }
+    
     if request.method == 'POST':
         from blood.models import BloodRequest
         
-        patient_name = request.POST.get('patient_name', '').strip()
-        patient_age = request.POST.get('patient_age', '').strip()
-        reason = request.POST.get('reason', '').strip()
-        bloodgroup = request.POST.get('bloodgroup', '').strip()
-        unit = request.POST.get('unit', '').strip()
+        form_data.update({
+            'patient_name': request.POST.get('patient_name', '').strip(),
+            'patient_age': request.POST.get('patient_age', '').strip(),
+            'reason': request.POST.get('reason', '').strip(),
+            'bloodgroup': request.POST.get('bloodgroup', '').strip(),
+            'unit': request.POST.get('unit', '').strip(),
+            'request_zipcode': request.POST.get('request_zipcode', '').strip(),
+            'is_urgent': request.POST.get('is_urgent') == 'on',
+        })
+        patient_name = form_data['patient_name']
+        patient_age_raw = form_data['patient_age']
+        reason = form_data['reason']
+        bloodgroup = form_data['bloodgroup']
+        unit_raw = form_data['unit']
+        request_zipcode = form_data['request_zipcode']
+        is_urgent = form_data['is_urgent']
         
         # Enhanced validation
         errors = []
+        patient_age = None
+        unit = None
         
         if not patient_name:
             errors.append('Patient name is required.')
         elif len(patient_name) < 2:
             errors.append('Patient name must be at least 2 characters.')
         
-        if not patient_age:
+        if not patient_age_raw:
             errors.append('Patient age is required.')
         else:
             try:
-                patient_age = int(patient_age)
+                patient_age = int(patient_age_raw)
                 if patient_age < 1 or patient_age > 120:
                     errors.append('Patient age must be between 1 and 120.')
             except ValueError:
@@ -345,40 +374,64 @@ def donor_request_blood_view(request):
         if not bloodgroup or bloodgroup == 'Choose Blood Group':
             errors.append('Please select a blood group.')
         
-        if not unit:
+        if not unit_raw:
             errors.append('Unit amount is required.')
         else:
             try:
-                unit = int(unit)
+                unit = int(unit_raw)
                 if unit < 100 or unit > 500:
                     errors.append('Unit amount must be between 100ml and 500ml.')
             except ValueError:
                 errors.append('Please enter a valid unit amount.')
+
+        if request_zipcode:
+            if not request_zipcode.isdigit() or not (4 <= len(request_zipcode) <= 10):
+                errors.append('Zip/Postal code must be 4-10 digits.')
+        elif is_urgent:
+            errors.append('Zip/Postal code is required so admins can triage urgent requests locally.')
         
         if errors:
             for error in errors:
                 messages.error(request, error)
-            return render(request, 'donor/makerequest.html', {'donor': donor})
+            return render(request, 'donor/makerequest.html', {'donor': donor, 'form_data': form_data})
         
         try:
-            BloodRequest.objects.create(
+            blood_request = BloodRequest.objects.create(
                 request_by_donor=donor,
                 patient_name=patient_name,
                 patient_age=patient_age,
                 reason=reason,
                 bloodgroup=bloodgroup,
                 unit=unit,
-                status='Pending'
+                status='Pending',
+                is_urgent=is_urgent,
+                request_zipcode=request_zipcode,
             )
             
-            messages.success(request, f'Blood request submitted successfully! Requested {unit}ml of {bloodgroup} blood for {patient_name}.')
+            success_msg = (
+                f'Blood request submitted successfully! Requested {unit}ml of {bloodgroup} blood for {patient_name}.'
+            )
+            if is_urgent:
+                success_msg += ' Admins will prioritize this request and coordinate follow-ups directly.'
+            messages.success(request, success_msg)
+
+            if is_urgent:
+                try:
+                    sms_service.notify_matched_donors(blood_request, contact_number=donor.mobile)
+                except Exception as alert_error:  # pragma: no cover - defensive logging only
+                    logger.error(
+                        "Failed to dispatch SNS alert for donor request %s: %s",
+                        blood_request.id,
+                        alert_error,
+                    )
+                sms_service.send_requester_confirmation(blood_request, donor.mobile)
             return redirect('donor-request-history')
             
         except Exception as e:
             print(f"Error creating blood request: {str(e)}")
             messages.error(request, f'Error submitting request: {str(e)}')
     
-    return render(request, 'donor/makerequest.html', {'donor': donor})
+    return render(request, 'donor/makerequest.html', {'donor': donor, 'form_data': form_data})
 
 @login_required
 def donor_request_history_view(request):

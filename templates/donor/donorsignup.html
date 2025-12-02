@@ -609,6 +609,46 @@
                             {% render_field donorForm.address class="form-control" rows="3" placeholder="Full address" %}
                         </div>
 
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Latitude <small class="text-muted" style="text-transform:none;">(optional)</small></label>
+                                    <div class="input-group">
+                                        {% render_field donorForm.latitude class="form-control" placeholder="e.g. 12.971599" %}
+                                        <div class="input-group-append">
+                                            <span class="input-group-text"><i class="fas fa-map-marker-alt"></i></span>
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">Paste coordinates from Google Maps if you want precise pinning.</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Longitude <small class="text-muted" style="text-transform:none;">(optional)</small></label>
+                                    <div class="input-group">
+                                        {% render_field donorForm.longitude class="form-control" placeholder="e.g. 77.594566" %}
+                                        <div class="input-group-append">
+                                            <span class="input-group-text"><i class="fas fa-location-arrow"></i></span>
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">Both latitude & longitude are required for map pinning.</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="location-helper text-center">
+                            <button type="button"
+                                class="btn btn-outline-success btn-sm font-weight-bold js-geo-button"
+                                data-lat-selector="#id_latitude"
+                                data-lng-selector="#id_longitude"
+                                data-status-target="#geoStatusSignup">
+                                <i class="fas fa-location-arrow"></i> Use my current location
+                            </button>
+                            <small id="geoStatusSignup" class="d-block mt-2 text-muted">
+                                We'll only use your browser location once to prefill the coordinates.
+                            </small>
+                        </div>
+
                         <div class="form-group">
                             <label class="form-label">Profile Picture (optional)</label>
                             {% render_field donorForm.profile_pic class="form-control-file" %}
@@ -673,6 +713,52 @@
 
             sections.forEach(section => {
                 observer.observe(section);
+            });
+            // Geolocation helper
+            const geoButtons = document.querySelectorAll('.js-geo-button');
+            geoButtons.forEach(button => {
+                const latInput = document.querySelector(button.dataset.latSelector);
+                const lngInput = document.querySelector(button.dataset.lngSelector);
+                const statusEl = document.querySelector(button.dataset.statusTarget);
+                if (!latInput || !lngInput || !statusEl) {
+                    return;
+                }
+
+                button.addEventListener('click', () => {
+                    if (!navigator.geolocation) {
+                        statusEl.textContent = 'Your browser does not support location services.';
+                        statusEl.classList.add('text-danger');
+                        return;
+                    }
+
+                    statusEl.textContent = 'Locating… Please allow access if prompted.';
+                    statusEl.classList.remove('text-danger');
+                    button.disabled = true;
+                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching...';
+
+                    const done = () => {
+                        button.disabled = false;
+                        button.innerHTML = '<i class="fas fa-location-arrow"></i> Use my current location';
+                    };
+
+                    navigator.geolocation.getCurrentPosition((position) => {
+                        latInput.value = position.coords.latitude.toFixed(6);
+                        lngInput.value = position.coords.longitude.toFixed(6);
+                        statusEl.textContent = 'Success! Coordinates filled from your current location.';
+                        statusEl.classList.remove('text-danger');
+                        statusEl.classList.add('text-success');
+                        done();
+                    }, (error) => {
+                        const message = {
+                            1: 'Permission denied. Please allow access or enter the coordinates manually.',
+                            2: 'Location unavailable. Try again or enter coordinates manually.',
+                            3: 'Request timed out. Please retry.',
+                        }[error.code] || 'Unable to fetch your location.';
+                        statusEl.textContent = message;
+                        statusEl.classList.add('text-danger');
+                        done();
+                    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+                });
             });
         });
     </script>

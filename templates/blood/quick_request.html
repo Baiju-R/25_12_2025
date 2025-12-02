@@ -333,6 +333,16 @@
                                 </div>
                             </div>
                         </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Hospital Zip / Postal Code <span class="required">*</span></label>
+                                    <input type="text" name="request_zipcode" class="form-control" placeholder="Enter 4-10 digit code" value="{{ request_zipcode|default:'' }}" required>
+                                    <div class="help-text">Needed so coordinators can route requests to the nearest hospitals</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Contact Information Section -->

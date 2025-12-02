@@ -24,21 +24,25 @@ from patient import views as patient_views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', blood_views.home_view, name='home'),
-    
+
     # Authentication URLs
     path('adminlogin/', blood_views.adminlogin_view, name='adminlogin'),
     path('afterlogin/', blood_views.afterlogin_view, name='afterlogin'),
     path('logout/', blood_views.logout_view, name='logout'),
-    
+
     # Admin URLs
     path('admin-dashboard/', blood_views.admin_dashboard_view, name='admin-dashboard'),
     path('admin-blood/', blood_views.admin_blood_view, name='admin-blood'),
     path('admin-donor/', blood_views.admin_donor_view, name='admin-donor'),
+    path('admin-donor-map/', blood_views.admin_donor_map_view, name='admin-donor-map'),
     path('admin-patient/', blood_views.admin_patient_view, name='admin-patient'),
     path('admin-request/', blood_views.admin_request_view, name='admin-request'),
     path('admin-request-history/', blood_views.admin_request_history_view, name='admin-request-history'),
     path('admin-donation/', blood_views.admin_donation_view, name='admin-donation'),
-    
+    path('admin-analytics/', blood_views.admin_analytics_view, name='admin-analytics'),
+    path('admin-leadership/', blood_views.admin_leadership_view, name='admin-leadership'),
+    path('assistant/', blood_views.knowledge_chatbot_view, name='knowledge-chatbot'),
+
     # Admin action URLs
     path('update-donor/<int:pk>/', blood_views.update_donor_view, name='update-donor'),
     path('delete-donor/<int:pk>/', blood_views.delete_donor_view, name='delete-donor'),
@@ -48,12 +52,13 @@ urlpatterns = [
     path('reject-request/<int:pk>/', blood_views.update_reject_status_view, name='reject-request'),
     path('approve-donation/<int:pk>/', blood_views.approve_donation_view, name='approve-donation'),
     path('reject-donation/<int:pk>/', blood_views.reject_donation_view, name='reject-donation'),
-    
+
     # Quick request URLs (for anonymous users)
     path('quick-request/', blood_views.quick_request_view, name='quick-request'),
     path('quick-request-success/<int:request_id>/', blood_views.quick_request_success_view, name='quick-request-success'),
     path('request-blood/', blood_views.request_blood_redirect_view, name='request-blood'),
-    
+    path('test-sms/', blood_views.test_sms, name='test-sms'),
+
     # App URLs using include
     path('donor/', include('donor.urls')),
     path('patient/', include('patient.urls')),

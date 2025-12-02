@@ -31,6 +31,7 @@ py manage.py createsuperuser
 - If Blood Request rejected by admin then 0 unit of blood reduced from stock.
 - Can see history of blood request.
 - Can Update Unit Of Particular Blood Group.
+- Can verify donor coordinates and view all pin-ready donors on the interactive **Donor Map** (Leaflet + OSM) to validate coverage before approving requests.
 
 
 ### Donor
@@ -60,7 +61,7 @@ py manage.py createsuperuser
 - Move to project folder in Terminal. Then run following Commands :
 
 ```
-python -m pip install -r requirements. txt
+python -m pip install -r requirements.txt
 ```
 
 ```
@@ -72,6 +73,87 @@ py manage.py runserver
 ```
 http://127.0.0.1:8000/
 ```
+
+### Generate Demo Data (Optional)
+Need a populated dashboard for demos or screenshots? Run the management command below after migrating:
+
+```
+py manage.py seed_demo_data --purge --seed=123
+```
+
+- `--purge` wipes previously generated donors/patients/requests/donations before reseeding.
+- `--seed` makes the output deterministic; omit it for fresh randomness.
+- Use `--donors` or `--patients` to override the default 75‑100 range.
+
+All generated donor/patient accounts share the password **DemoPass123!** so you can log in quickly.
+
+
+### Built-in FAQ Copilot
+- Visit `http://127.0.0.1:8000/assistant/` (or click **FAQ Assistant** in any navigation bar) to open the guided chatbot.
+- The assistant ships with curated answers for admins, donors, patients, and anonymous visitors and mirrors the rules in `blood/views.py`.
+- Quick prompt chips, live stock/request stats, and links to dashboards make it easy for new teammates to self-serve without reading the entire codebase.
+
+### Urgent SMS Alerts (AWS SNS)
+- Urgent blood requests now trigger SMS alerts to available donors via **Amazon SNS**. Enable the feature by exporting the variables below (or adding them to `.env`) before starting Django:
+
+```
+AWS_SNS_ENABLED=true
+AWS_SNS_REGION=ap-south-1
+AWS_SNS_DEFAULT_COUNTRY_CODE=+91
+AWS_SNS_SENDER_ID=BLDBRDG
+AWS_SNS_MAX_RECIPIENTS=25
+AWS_SNS_MIN_NOTIFICATION_GAP_SECONDS=1800
+```
+
+- Configure AWS credentials with `aws configure` (or environment variables) on the same host running Django so boto3 can publish SMS messages.
+- Donors must have valid E.164 phone numbers on their profiles; the helper falls back to the default country code for 10-digit numbers but storing `+<country><number>` avoids any ambiguity.
+- When an urgent request is submitted (quick form, donor, or patient portals) the platform fetches available donors with matching blood groups, prioritizes those in the same zip/postal code, and texts up to `AWS_SNS_MAX_RECIPIENTS` recipients. Donor `last_notified_at` timestamps ensure no one is spammed more often than the configured gap.
+- Missing dependencies or SNS failures are logged server-side so requests still succeed even if alerts cannot be delivered.
+
+#### Start Ngrok Automatically
+Skip the manual Ngrok download step by using the built-in helper that relies on [pyngrok](https://github.com/alexdlaird/pyngrok):
+
+```
+py manage.py start_ngrok
+```
+
+- The command opens a tunnel for `http://127.0.0.1:8000`, prints the HTTPS forwarding URL, and keeps the session alive until you press **Ctrl+C**.
+- Pass `--authtoken <token>` once (or set `NGROK_AUTHTOKEN` in `.env`) so Ngrok can open longer sessions. Other useful flags:
+	- `--port 9000` — expose a different local port.
+	- `--no-inspect` — disable the Ngrok inspector UI if you don’t need request replay.
+- The previous `--write-env` / `MATCHING_CONFIRMATION_BASE_URL` helpers were removed along with messaging, so the command now focuses solely on opening tunnels.
+
+
+### Donor Geolocation & Map Verification
+- Both the donor signup form and the admin donor edit screen now accept optional latitude/longitude pairs (decimal degrees). Enter both values to place a marker; leave both blank to skip mapping.
+- Admins can open **Donor Map** from the sidebar to inspect pin-ready donors, toggle their "map verified" state, and focus only on donors with real coordinates. The page now embeds a Python-powered **Folium** globe so you can preview donor coverage server-side (ideal for screenshots or export) alongside the client-side controls.
+- Blue markers represent verified donors; yellow markers are awaiting verification. Use the panel on the right to approve/reset verification and keep the map trustworthy.
+- If a donor only provides an address, the platform now auto-geocodes it (OpenStreetMap / Nominatim + deterministic fixtures for common demo addresses) so their profile still lands on the map.
+- Need to backfill historic donors? Click **Auto-place missing donors** on the Donor Map to process up to 25 addresses per batch, or run the management command below for a full sweep:
+
+```
+py manage.py geocode_donors --limit 200
+```
+
+Add `--dry-run` to preview updates without saving or `--force` to reprocess donors that already have coordinates.
+
+- Demo data uses synthetic street names that real geocoders cannot resolve. Pass `--fallback` to auto-generate deterministic coordinates only when a lookup fails, or `--synthetic-only` to skip network calls entirely. The synthetic generator now snaps every address onto curated "+land only" tiles that span multiple continents, so no donor will sit in the ocean:
+
+```
+py manage.py geocode_donors --force --synthetic-only
+```
+
+The synthetic coordinates are stable per address (and still deterministic), so your map pins remain consistent between deployments even without internet access or remote geocoders.
+
+- Already have bad historical pins floating in the sea? Run the land-locker to analyze every donor and relocate only the ocean entries:
+
+```
+py manage.py fix_ocean_donors --synthetic-only
+```
+
+Add `--dry-run` to preview the moves without writing changes, `--limit` to operate on a subset, or pass `--country=us` / similar to bias the optional remote geocoder before falling back to deterministic land tiles.
+
+> **Heads-up:** The Folium renderer ships as an optional dependency. If the server console reports `folium` missing, install it with `python -m pip install folium` (already listed in `requirements.txt`). The donor map template will show a graceful error reminder until it becomes available.
 
 
 

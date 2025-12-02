@@ -23,17 +23,47 @@ class DonorForm(forms.ModelForm):
     ]
     
     bloodgroup = forms.ChoiceField(choices=BLOOD_GROUP_CHOICES, widget=forms.Select(attrs={'class': 'form-control'}))
+    latitude = forms.DecimalField(
+        required=False,
+        min_value=-90,
+        max_value=90,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.000001'}),
+        help_text='Optional. Example: 12.971598'
+    )
+    longitude = forms.DecimalField(
+        required=False,
+        min_value=-180,
+        max_value=180,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.000001'}),
+        help_text='Optional. Example: 77.594566'
+    )
     
     class Meta:
         model = Donor
-        fields = ['bloodgroup', 'address', 'mobile', 'profile_pic']
+        fields = ['bloodgroup', 'address', 'mobile', 'latitude', 'longitude', 'profile_pic']
         widgets = {
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'mobile': forms.TextInput(attrs={'class': 'form-control'}),
             'profile_pic': forms.FileInput(attrs={'class': 'form-control-file'})
         }
 
+    def clean(self):
+        cleaned_data = super().clean()
+        lat = cleaned_data.get('latitude')
+        lng = cleaned_data.get('longitude')
+
+        if (lat is None) != (lng is None):
+            raise forms.ValidationError('Please provide both latitude and longitude or leave both blank.')
+
+        return cleaned_data
+
 class BloodDonateForm(forms.ModelForm):
     class Meta:
         model = BloodDonate
         fields = ['bloodgroup', 'unit', 'disease', 'age']
+
+
+class DonorUserUpdateForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'username']

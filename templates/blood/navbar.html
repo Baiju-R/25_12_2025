@@ -324,67 +324,67 @@
               </a>
             </li>
             {% if user.is_authenticated %}
-                {% if user.is_superuser %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin-dashboard/">
-                            <i class="fas fa-tachometer-alt"></i> Admin Dashboard
-                        </a>
-                    </li>
-                {% elif user.groups.all|length > 0 and user.groups.all.0.name == 'DONOR' %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/donor/donor-dashboard/">
-                            <i class="fas fa-heart"></i> Donor Dashboard
-                        </a>
-                    </li>
-                {% elif user.groups.all|length > 0 and user.groups.all.0.name == 'PATIENT' %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/patient/dashboard/">
-                            <i class="fas fa-user-injured"></i> Patient Dashboard
-                        </a>
-                    </li>
-                {% endif %}
+              {% if user.is_superuser %}
                 <li class="nav-item">
-                    <a class="nav-link" href="/logout/">
-                        <i class="fas fa-sign-out-alt"></i> Logout
-                    </a>
+                  <a class="nav-link" href="/admin-dashboard/">
+                    <i class="fas fa-tachometer-alt"></i> Admin Dashboard
+                  </a>
                 </li>
+              {% elif user.groups.all|length > 0 and user.groups.all.0.name == 'DONOR' %}
+                <li class="nav-item">
+                  <a class="nav-link" href="/donor/donor-dashboard/">
+                    <i class="fas fa-heart"></i> Donor Dashboard
+                  </a>
+                </li>
+              {% elif user.groups.all|length > 0 and user.groups.all.0.name == 'PATIENT' %}
+                <li class="nav-item">
+                  <a class="nav-link" href="/patient/dashboard/">
+                    <i class="fas fa-user-injured"></i> Patient Dashboard
+                  </a>
+                </li>
+              {% endif %}
+              <li class="nav-item">
+                <a class="nav-link" href="/logout/">
+                  <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+              </li>
             {% else %}
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" id="donorDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        <i class="fas fa-users"></i> Donor
+                  <a class="nav-link dropdown-toggle" href="#" id="donorDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    <i class="fas fa-users"></i> Donor
+                  </a>
+                  <div class="dropdown-menu" aria-labelledby="donorDropdown">
+                    <a class="dropdown-item" href="/donor/donorlogin/">
+                      <i class="fas fa-sign-in-alt"></i> Login
                     </a>
-                    <div class="dropdown-menu" aria-labelledby="donorDropdown">
-                        <a class="dropdown-item" href="/donor/donorlogin/">
-                            <i class="fas fa-sign-in-alt"></i> Login
-                        </a>
-                        <a class="dropdown-item" href="/donor/donorsignup/">
-                            <i class="fas fa-user-plus"></i> Sign Up
-                        </a>
-                    </div>
+                    <a class="dropdown-item" href="/donor/donorsignup/">
+                      <i class="fas fa-user-plus"></i> Sign Up
+                    </a>
+                  </div>
                 </li>
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" id="patientDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        <i class="fas fa-user-injured"></i> Patient
+                  <a class="nav-link dropdown-toggle" href="#" id="patientDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    <i class="fas fa-user-injured"></i> Patient
+                  </a>
+                  <div class="dropdown-menu" aria-labelledby="patientDropdown">
+                    <a class="dropdown-item" href="/patient/patientlogin/">
+                      <i class="fas fa-sign-in-alt"></i> Login
                     </a>
-                    <div class="dropdown-menu" aria-labelledby="patientDropdown">
-                        <a class="dropdown-item" href="/patient/patientlogin/">
-                            <i class="fas fa-sign-in-alt"></i> Login
-                        </a>
-                        <a class="dropdown-item" href="/patient/patientsignup/">
-                            <i class="fas fa-user-plus"></i> Sign Up
-                        </a>
-                        <div class="dropdown-divider"></div>
-                        <a class="dropdown-item" href="/quick-request/" style="background: linear-gradient(45deg, #e74c3c, #c0392b); color: white !important; border-radius: 10px; margin: 5px;">
-                            <i class="fas fa-bolt"></i> Emergency Blood Request
-                        </a>
-                    </div>
+                    <a class="dropdown-item" href="/patient/patientsignup/">
+                      <i class="fas fa-user-plus"></i> Sign Up
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item" href="/quick-request/" style="background: linear-gradient(45deg, #e74c3c, #c0392b); color: white !important; border-radius: 10px; margin: 5px;">
+                      <i class="fas fa-bolt"></i> Emergency Blood Request
+                    </a>
+                  </div>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="/adminlogin/">
-                        <i class="fas fa-user-shield"></i> Admin Login
-                    </a>
+                  <a class="nav-link" href="/adminlogin/">
+                    <i class="fas fa-user-shield"></i> Admin Login
+                  </a>
                 </li>
-            {% endif %}
+              {% endif %}
           </ul>
         </div>
       </div>
@@ -485,6 +485,8 @@
             }
           });
         </script>
+
+        {% include 'blood/faq_button.html' %}
       
       </body>
       </html>

@@ -77,37 +77,51 @@
                 
                 <div class="form-group">
                     <label><i class="fas fa-user"></i> Patient Name</label>
-                    <input type="text" name="patient_name" class="form-control" placeholder="Enter patient full name" required>
+                    <input type="text" name="patient_name" class="form-control" placeholder="Enter patient full name" value="{{ form_data.patient_name|default:'' }}" required>
                 </div>
 
                 <div class="form-group">
                     <label><i class="fas fa-calendar-alt"></i> Patient Age</label>
-                    <input type="number" name="patient_age" class="form-control" placeholder="Enter patient age" min="1" max="120" required>
+                    <input type="number" name="patient_age" class="form-control" placeholder="Enter patient age" min="1" max="120" value="{{ form_data.patient_age|default:'' }}" required>
                 </div>
 
                 <div class="form-group">
                     <label><i class="fas fa-stethoscope"></i> Medical Reason</label>
-                    <textarea name="reason" class="form-control" rows="4" placeholder="Describe the medical condition and urgency" required></textarea>
+                    <textarea name="reason" class="form-control" rows="4" placeholder="Describe the medical condition and urgency" required>{{ form_data.reason|default:'' }}</textarea>
                 </div>
 
                 <div class="form-group">
                     <label><i class="fas fa-tint"></i> Blood Group Required</label>
                     <select name="bloodgroup" class="form-control" required>
-                        <option value="">Choose Blood Group</option>
-                        <option value="O+">O+</option>
-                        <option value="O-">O-</option>
-                        <option value="A+">A+</option>
-                        <option value="A-">A-</option>
-                        <option value="B+">B+</option>
-                        <option value="B-">B-</option>
-                        <option value="AB+">AB+</option>
-                        <option value="AB-">AB-</option>
+                        <option value="" {% if not form_data.bloodgroup %}selected{% endif %}>Choose Blood Group</option>
+                        <option value="O+" {% if form_data.bloodgroup == 'O+' %}selected{% endif %}>O+</option>
+                        <option value="O-" {% if form_data.bloodgroup == 'O-' %}selected{% endif %}>O-</option>
+                        <option value="A+" {% if form_data.bloodgroup == 'A+' %}selected{% endif %}>A+</option>
+                        <option value="A-" {% if form_data.bloodgroup == 'A-' %}selected{% endif %}>A-</option>
+                        <option value="B+" {% if form_data.bloodgroup == 'B+' %}selected{% endif %}>B+</option>
+                        <option value="B-" {% if form_data.bloodgroup == 'B-' %}selected{% endif %}>B-</option>
+                        <option value="AB+" {% if form_data.bloodgroup == 'AB+' %}selected{% endif %}>AB+</option>
+                        <option value="AB-" {% if form_data.bloodgroup == 'AB-' %}selected{% endif %}>AB-</option>
                     </select>
                 </div>
 
                 <div class="form-group">
                     <label><i class="fas fa-flask"></i> Unit (in ml)</label>
-                    <input type="number" name="unit" class="form-control" placeholder="Enter required amount (ml)" min="100" max="500" required>
+                    <input type="number" name="unit" class="form-control" placeholder="Enter required amount (ml)" min="100" max="500" value="{{ form_data.unit|default:'' }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-map-marker-alt"></i> Patient Zip / Postal Code</label>
+                    <input type="text" name="request_zipcode" class="form-control" placeholder="Enter 4-10 digit code" value="{{ form_data.request_zipcode|default:'' }}">
+                    <small class="text-muted">Defaults to your profile zip if available. It helps admins coordinate nearby hospitals.</small>
+                </div>
+
+                <div class="form-group">
+                    <div class="custom-control custom-switch">
+                        <input type="checkbox" class="custom-control-input" id="donorUrgentToggle" name="is_urgent" {% if form_data.is_urgent %}checked{% endif %}>
+                        <label class="custom-control-label" for="donorUrgentToggle">Mark as urgent &amp; highlight this request to admins</label>
+                    </div>
+                    <small class="text-muted">Urgent requests jump ahead in the admin review queue once submitted.</small>
                 </div>
 
                 <button class="submit-btn" type="submit">

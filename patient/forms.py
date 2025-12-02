@@ -35,3 +35,25 @@ class PatientForm(forms.ModelForm):
             'mobile': forms.TextInput(attrs={'class': 'form-control'}),
             'profile_pic': forms.FileInput(attrs={'class': 'form-control-file'})
         }
+
+class PatientRequestForm(forms.ModelForm):
+    is_urgent = forms.BooleanField(required=False, label="Mark request as urgent (notifies nearby donors)")
+
+    class Meta:
+        model = Patient
+        fields = [
+            'age',
+            'bloodgroup',
+            'disease',
+            'doctorname',
+            'address',
+            'mobile',
+            'profile_pic',
+            'is_urgent',
+        ]
+
+
+class PatientUserUpdateForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'username']

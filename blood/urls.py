@@ -11,10 +11,13 @@ urlpatterns = [
     path('admin-dashboard/', views.admin_dashboard_view, name='admin-dashboard'),
     path('admin-blood/', views.admin_blood_view, name='admin-blood'),
     path('admin-donor/', views.admin_donor_view, name='admin-donor'),
+    path('admin-donor-map/', views.admin_donor_map_view, name='admin-donor-map'),
     path('admin-patient/', views.admin_patient_view, name='admin-patient'),
     path('admin-request/', views.admin_request_view, name='admin-request'),
     path('admin-request-history/', views.admin_request_history_view, name='admin-request-history'),
     path('admin-donation/', views.admin_donation_view, name='admin-donation'),
+    path('admin-analytics/', views.admin_analytics_view, name='admin-analytics'),
+    path('admin-leadership/', views.admin_leadership_view, name='admin-leadership'),
     
     # Admin Actions
     path('update-donor/<int:pk>/', views.update_donor_view, name='update-donor'),
@@ -28,4 +31,5 @@ urlpatterns = [
     
     # Utility URLs
     path('request-blood/', views.request_blood_redirect_view, name='request-blood-redirect'),
+    path('test-sms/', views.test_sms, name='test-sms'),
 ]
