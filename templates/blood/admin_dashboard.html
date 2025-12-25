@@ -1,4 +1,5 @@
 {% extends 'blood/adminbase.html' %}
+{% load math_filters %}
 {% block content %}
 
 <style>
@@ -172,6 +173,198 @@
         font-weight: 600;
         text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
     }
+
+    /* Mini charts (no external JS required) */
+    .qa-card-body {
+        padding: 22px;
+    }
+
+    .qa-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .qa-row-spacer {
+        margin-top: 18px;
+    }
+
+    .qa-link {
+        font-weight: 800;
+        color: #3498db;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .qa-link:hover {
+        text-decoration: underline;
+    }
+
+    .qa-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 10px;
+    }
+
+    .qa-kpi {
+        background: rgba(248, 250, 252, 0.92);
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        border-radius: 14px;
+        padding: 14px;
+        text-align: center;
+    }
+
+    .qa-actions {
+        margin-top: 14px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .qa-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        font-weight: 800;
+        padding: 10px 14px;
+        text-decoration: none;
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        background: rgba(255,255,255,0.92);
+        color: #2c3e50;
+    }
+
+    .qa-btn:hover {
+        background: rgba(255,255,255,1);
+        text-decoration: none;
+    }
+
+    .mini-card-title {
+        font-weight: 700;
+        color: #2c3e50;
+        margin-bottom: 10px;
+    }
+
+    .mini-subtle {
+        color: #7f8c8d;
+        font-size: 0.9rem;
+    }
+
+    .mini-bar-chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        height: 160px;
+        padding: 10px 10px;
+        background: rgba(248, 250, 252, 0.92);
+        border-radius: 16px;
+        border: 1px solid rgba(226, 232, 240, 0.9);
+    }
+
+    .mini-bar-group {
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        width: 12px;
+    }
+
+    .mini-bar {
+        width: 4px;
+        border-radius: 4px;
+        min-height: 2px;
+    }
+
+    .mini-bar.requests {
+        background: rgba(243, 156, 18, 0.75);
+    }
+
+    .mini-bar.donations {
+        background: rgba(46, 204, 113, 0.75);
+    }
+
+    .mini-legend {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 10px;
+    }
+
+    .mini-legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 700;
+        color: #2c3e50;
+        font-size: 0.9rem;
+    }
+
+    .legend-swatch {
+        width: 12px;
+        height: 12px;
+        border-radius: 4px;
+        display: inline-block;
+    }
+
+    .legend-swatch.requests { background: rgba(243, 156, 18, 0.85); }
+    .legend-swatch.donations { background: rgba(46, 204, 113, 0.85); }
+    .legend-swatch.rejected { background: rgba(231, 76, 60, 0.85); }
+
+    .stock-rows {
+        display: grid;
+        gap: 10px;
+    }
+
+    .stock-row {
+        display: grid;
+        grid-template-columns: 52px 1fr 70px;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .stock-label {
+        font-weight: 800;
+        color: #2c3e50;
+        text-align: right;
+    }
+
+    .stock-bar-wrap {
+        height: 12px;
+        border-radius: 999px;
+        background: rgba(226, 232, 240, 0.9);
+        overflow: hidden;
+    }
+
+    .stock-bar {
+        height: 100%;
+        border-radius: 999px;
+        background: rgba(52, 152, 219, 0.65);
+    }
+
+    .stock-value {
+        font-weight: 800;
+        color: #2c3e50;
+        text-align: left;
+    }
+
+    .status-stack {
+        height: 16px;
+        border-radius: 999px;
+        overflow: hidden;
+        display: flex;
+        background: rgba(226, 232, 240, 0.9);
+    }
+
+    .status-seg {
+        height: 100%;
+    }
+
+    .status-seg.approved { background: rgba(46, 204, 113, 0.75); }
+    .status-seg.pending { background: rgba(243, 156, 18, 0.75); }
+    .status-seg.rejected { background: rgba(231, 76, 60, 0.75); }
     
     /* Responsive adjustments */
     @media (max-width: 768px) {
@@ -190,6 +383,14 @@
         .stats-icon {
             font-size: 2.5rem;
         }
+
+        .mini-bar-chart {
+            height: 140px;
+        }
+
+        .qa-card-body {
+            padding: 18px;
+        }
     }
 </style>
 
@@ -198,6 +399,114 @@
         <div class="dashboard-header">
             <h1><i class="fas fa-tachometer-alt"></i> BloodBridge Admin Dashboard</h1>
             <p>Blood Donation Management Overview</p>
+        </div>
+
+        <div class="section-title">
+            <i class="fas fa-chart-line"></i> Quick Analytics (Last 14 Days)
+        </div>
+
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card blood-card stats-card">
+                    <div class="qa-card-body">
+                        <div class="qa-head">
+                            <div>
+                                <div class="mini-card-title" style="margin-bottom: 4px;">Requests vs Approved Donations</div>
+                                <div class="mini-subtle">Daily activity snapshot (hover bars for exact values)</div>
+                            </div>
+                            <a href="/admin-analytics/" class="qa-link">Analytics</a>
+                        </div>
+
+                        <div class="mini-bar-chart" aria-label="14-day activity chart">
+                            {% for day in dashboard_activity_days %}
+                                <div class="mini-bar-group" title="{{day.label}} • Requests: {{day.requests}} • Donations: {{day.donations}}">
+                                    <div class="mini-bar requests" data-pct="{{ day.requests|percentage:dashboard_activity_max }}"></div>
+                                    <div class="mini-bar donations" data-pct="{{ day.donations|percentage:dashboard_activity_max }}"></div>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="mini-legend">
+                            <span><i class="legend-swatch requests"></i>Requests</span>
+                            <span><i class="legend-swatch donations"></i>Approved Donations</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card blood-card stats-card">
+                    <div class="qa-card-body">
+                        <div class="qa-head">
+                            <div>
+                                <div class="mini-card-title" style="margin-bottom: 4px;">Urgent Pending</div>
+                                <div class="mini-subtle">Requests flagged as urgent</div>
+                            </div>
+                            <a href="/admin-request/" class="qa-link">View</a>
+                        </div>
+
+                        <div class="qa-kpi-grid">
+                            <div class="qa-kpi">
+                                <div class="stats-number requests" style="font-size: 2.1rem; margin-bottom: 6px;">{{urgent_pending_count}}</div>
+                                <div class="stats-label">Requests</div>
+                            </div>
+                            <div class="qa-kpi">
+                                <div class="stats-number total" style="font-size: 2.1rem; margin-bottom: 6px;">{{urgent_pending_units}}</div>
+                                <div class="stats-label">Units (ml)</div>
+                            </div>
+                        </div>
+
+                        <div class="qa-actions">
+                            <a href="/admin-analytics/" class="qa-btn">Open full analytics</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row qa-row-spacer">
+            <div class="col-lg-6">
+                <div class="card blood-card stats-card">
+                    <div class="qa-card-body">
+                        <div class="mini-card-title">Stock by Blood Group</div>
+                        <div class="stock-rows">
+                            {% for item in dashboard_stock_items %}
+                                <div class="stock-row" title="{{item.bloodgroup}}: {{item.units}} ml">
+                                    <div class="stock-label">{{item.bloodgroup}}</div>
+                                    <div class="stock-bar-wrap">
+                                        <div class="stock-bar" data-pct="{{ item.units|percentage:dashboard_stock_max }}"></div>
+                                    </div>
+                                    <div class="stock-value">{{item.units}}</div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="mini-subtle" style="margin-top: 10px;">
+                            Bars are scaled to the max group stock.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card blood-card stats-card">
+                    <div class="qa-card-body">
+                        <div class="mini-card-title">Request Status Mix</div>
+                        <div class="status-stack" aria-label="request status mix">
+                            {% for row in dashboard_request_status_items %}
+                                <div class="status-seg {{row.class}}" data-pct="{{ row.count|percentage:dashboard_request_status_total }}" title="{{row.label}}: {{row.count}}"></div>
+                            {% endfor %}
+                        </div>
+                        <div class="mini-legend" style="margin-top: 12px;">
+                            <span><i class="legend-swatch donations"></i>Approved</span>
+                            <span><i class="legend-swatch requests"></i>Pending</span>
+                            <span><i class="legend-swatch rejected"></i>Rejected</span>
+                        </div>
+                        <div class="mini-subtle" style="margin-top: 10px;">
+                            Mix is based on all requests in the system.
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="section-title">
@@ -374,7 +683,29 @@
                 </div>
             </div>
         </div>
+
+
     </div>
 </div>
 
 {% endblock content %}
+
+{% block extra_scripts %}
+<script>
+    (function() {
+        document.querySelectorAll('[data-pct]').forEach(function(el) {
+            const raw = el.getAttribute('data-pct');
+            const pct = Number(raw);
+            if (!Number.isFinite(pct)) {
+                return;
+            }
+
+            if (el.classList.contains('mini-bar')) {
+                el.style.height = pct + '%';
+            } else {
+                el.style.width = pct + '%';
+            }
+        });
+    })();
+</script>
+{% endblock %}

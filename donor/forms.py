@@ -40,10 +40,19 @@ class DonorForm(forms.ModelForm):
     
     class Meta:
         model = Donor
-        fields = ['bloodgroup', 'address', 'mobile', 'latitude', 'longitude', 'profile_pic']
+        fields = [
+            'bloodgroup', 'address', 'mobile', 'latitude', 'longitude', 'zipcode', 'profile_pic',
+            # Medical / eligibility (optional but recommended for smart matching)
+            'sex', 'date_of_birth', 'weight_kg', 'hemoglobin_g_dl',
+            'blood_pressure_systolic', 'blood_pressure_diastolic',
+            'has_chronic_disease', 'chronic_disease_details',
+            'on_medication', 'medication_details',
+            'smokes',
+        ]
         widgets = {
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'mobile': forms.TextInput(attrs={'class': 'form-control'}),
+            'zipcode': forms.TextInput(attrs={'class': 'form-control'}),
             'profile_pic': forms.FileInput(attrs={'class': 'form-control-file'})
         }
 

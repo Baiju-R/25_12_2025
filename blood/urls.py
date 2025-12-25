@@ -14,6 +14,7 @@ urlpatterns = [
     path('admin-donor-map/', views.admin_donor_map_view, name='admin-donor-map'),
     path('admin-patient/', views.admin_patient_view, name='admin-patient'),
     path('admin-request/', views.admin_request_view, name='admin-request'),
+    path('admin-request/<int:pk>/recommendations/', views.admin_request_recommendations_view, name='admin-request-recommendations'),
     path('admin-request-history/', views.admin_request_history_view, name='admin-request-history'),
     path('admin-donation/', views.admin_donation_view, name='admin-donation'),
     path('admin-analytics/', views.admin_analytics_view, name='admin-analytics'),

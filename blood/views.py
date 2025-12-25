@@ -30,6 +30,7 @@ from donor import forms as dforms
 from donor import models as dmodels
 from patient import forms as pforms
 from patient import models as pmodels
+from .services.donor_recommender import recommend_donors_for_request
 
 logger = logging.getLogger(__name__)
 
@@ -84,13 +85,13 @@ CHATBOT_FAQ = [
                     "groups"
                 ],
                 "next_steps": [
-                    "Use /donor/signup/ or /patient/signup/ for self-service onboarding",
+                    "Use /donor/donorsignup/ or /patient/patientsignup/ for self-service onboarding",
                     "Admins create via `py manage.py createsuperuser`",
                     "Each seeded demo user shares the password DemoPass123!"
                 ],
                 "links": [
-                    {"label": "Donor signup", "url": "/donor/signup/"},
-                    {"label": "Patient signup", "url": "/patient/signup/"}
+                    {"label": "Donor signup", "url": "/donor/donorsignup/"},
+                    {"label": "Patient signup", "url": "/patient/patientsignup/"}
                 ],
                 "audience": "Everyone"
             },
@@ -263,7 +264,7 @@ CHATBOT_FAQ = [
                     "patient onboarding"
                 ],
                 "next_steps": [
-                    "Register via /patient/signup/",
+                    "Register via /patient/patientsignup/",
                     "Confirm your blood group + doctor info",
                     "Head to Make Request"
                 ],
@@ -474,9 +475,6 @@ def home_view(request):
             blood.bloodgroup = bg
             blood.save()
 
-    if request.user.is_authenticated:
-        return HttpResponseRedirect('afterlogin')  
-
     top_donor_spotlight = []
     placeholder_avatar = static('image/homepage.png')
 
@@ -568,6 +566,93 @@ def admin_dashboard_view(request):
     total_donations = dmodels.BloodDonate.objects.count()
     approved_donations = dmodels.BloodDonate.objects.filter(status='Approved').count()
     
+    # Dashboard mini analytics (lightweight)
+    today = timezone.now().date()
+    window_days = 14
+    window_start = today - timedelta(days=window_days - 1)
+
+    request_status_counts = {
+        'Approved': models.BloodRequest.objects.filter(status='Approved').count(),
+        'Pending': models.BloodRequest.objects.filter(status='Pending').count(),
+        'Rejected': models.BloodRequest.objects.filter(status='Rejected').count(),
+    }
+    request_status_total = sum(request_status_counts.values()) or 1
+    dashboard_request_status_items = [
+        {'label': 'Approved', 'count': request_status_counts['Approved'], 'class': 'approved'},
+        {'label': 'Pending', 'count': request_status_counts['Pending'], 'class': 'pending'},
+        {'label': 'Rejected', 'count': request_status_counts['Rejected'], 'class': 'rejected'},
+    ]
+
+    urgent_pending_qs = models.BloodRequest.objects.filter(status='Pending', is_urgent=True)
+    urgent_pending_count = urgent_pending_qs.count()
+    urgent_pending_units = urgent_pending_qs.aggregate(total=Sum('unit'))['total'] or 0
+
+    # Stock distribution chart
+    blood_groups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
+    stock_map = {row.bloodgroup: float(row.unit or 0) for row in models.Stock.objects.filter(bloodgroup__in=blood_groups)}
+    dashboard_stock_items = [
+        {'bloodgroup': bg, 'units': stock_map.get(bg, 0)} for bg in blood_groups
+    ]
+    dashboard_stock_max = max([item['units'] for item in dashboard_stock_items] + [1])
+    dashboard_stock_chart = json.dumps(
+        {
+            'labels': blood_groups,
+            'units': [stock_map.get(bg, 0) for bg in blood_groups],
+        },
+        cls=DjangoJSONEncoder,
+    )
+
+    # 14-day activity trend (counts)
+    requests_daily = (
+        models.BloodRequest.objects.filter(date__gte=window_start, date__lte=today)
+        .values('date')
+        .annotate(total=Count('id'))
+        .order_by('date')
+    )
+    donations_daily = (
+        dmodels.BloodDonate.objects.filter(date__gte=window_start, date__lte=today, status='Approved')
+        .values('date')
+        .annotate(total=Count('id'))
+        .order_by('date')
+    )
+    req_day_map = {entry['date']: int(entry['total'] or 0) for entry in requests_daily}
+    don_day_map = {entry['date']: int(entry['total'] or 0) for entry in donations_daily}
+
+    timeline_labels = []
+    timeline_requests = []
+    timeline_donations = []
+    for offset in range(window_days):
+        day = window_start + timedelta(days=offset)
+        timeline_labels.append(day.strftime('%d %b'))
+        timeline_requests.append(req_day_map.get(day, 0))
+        timeline_donations.append(don_day_map.get(day, 0))
+
+    dashboard_activity_days = []
+    for idx in range(window_days):
+        dashboard_activity_days.append({
+            'label': timeline_labels[idx],
+            'requests': timeline_requests[idx],
+            'donations': timeline_donations[idx],
+        })
+    dashboard_activity_max = max(timeline_requests + timeline_donations + [1])
+
+    dashboard_activity_chart = json.dumps(
+        {
+            'labels': timeline_labels,
+            'requests': timeline_requests,
+            'donations': timeline_donations,
+        },
+        cls=DjangoJSONEncoder,
+    )
+
+    dashboard_request_status_chart = json.dumps(
+        {
+            'labels': list(request_status_counts.keys()),
+            'counts': list(request_status_counts.values()),
+        },
+        cls=DjangoJSONEncoder,
+    )
+
     dict={
         'A1':models.Stock.objects.get(bloodgroup="A+"),
         'A2':models.Stock.objects.get(bloodgroup="A-"),
@@ -586,6 +671,17 @@ def admin_dashboard_view(request):
         'totalrejectedrequest': rejected_requests,
         'totaldonations': total_donations,
         'totalapproveddonations': approved_donations,
+        'urgent_pending_count': urgent_pending_count,
+        'urgent_pending_units': urgent_pending_units,
+        'dashboard_activity_days': dashboard_activity_days,
+        'dashboard_activity_max': dashboard_activity_max,
+        'dashboard_stock_items': dashboard_stock_items,
+        'dashboard_stock_max': dashboard_stock_max,
+        'dashboard_request_status_items': dashboard_request_status_items,
+        'dashboard_request_status_total': request_status_total,
+        'dashboard_stock_chart': dashboard_stock_chart,
+        'dashboard_activity_chart': dashboard_activity_chart,
+        'dashboard_request_status_chart': dashboard_request_status_chart,
     }
     return render(request, 'blood/admin_dashboard.html', context=dict)
 
@@ -915,6 +1011,24 @@ def admin_request_history_view(request):
     
     return render(request, 'blood/admin_request_history.html', context)
 
+
+@login_required
+def admin_request_recommendations_view(request, pk):
+    if not request.user.is_superuser:
+        return redirect('adminlogin')
+
+    blood_request = get_object_or_404(models.BloodRequest.objects.select_related('patient', 'request_by_donor'), id=pk)
+
+    # Show recommendations even if request already processed (read-only insights), but default UX is for Pending.
+    recommendations = recommend_donors_for_request(blood_request, limit=10, require_eligible=True)
+
+    context = {
+        'blood_request': blood_request,
+        'recommendations': recommendations,
+        'recovery_days': int(getattr(settings, 'DONATION_RECOVERY_DAYS', 56)),
+    }
+    return render(request, 'blood/admin_request_recommendations.html', context)
+
 @login_required
 def update_approve_status_view(request, pk):
     if not request.user.is_superuser:
@@ -956,9 +1070,14 @@ def update_approve_status_view(request, pk):
                 )
                 
                 # Log the transaction for audit trail
-                print(f"BLOOD REQUEST APPROVED - ID: {pk}, Patient: {patient_name}, "
-                      f"Blood Group: {request_blood_group}, Units: {request_blood_unit}ml, "
-                      f"Remaining Stock: {stock.unit}ml")
+                logger.info(
+                    "BLOOD REQUEST APPROVED - ID: %s, Patient: %s, Blood Group: %s, Units: %sml, Remaining Stock: %sml",
+                    pk,
+                    patient_name,
+                    request_blood_group,
+                    request_blood_unit,
+                    stock.unit,
+                )
                       
             else:
                 # Insufficient stock
@@ -1018,8 +1137,13 @@ def update_reject_status_view(request, pk):
         )
         
         # Log the transaction
-        print(f"BLOOD REQUEST REJECTED - ID: {pk}, Patient: {patient_name}, "
-              f"Blood Group: {request_blood_group}, Units: {request_blood_unit}ml")
+        logger.info(
+            "BLOOD REQUEST REJECTED - ID: %s, Patient: %s, Blood Group: %s, Units: %sml",
+            pk,
+            patient_name,
+            request_blood_group,
+            request_blood_unit,
+        )
               
     except models.BloodRequest.DoesNotExist:
         messages.error(request, '❌ Error: Blood request not found.')
@@ -1054,6 +1178,14 @@ def approve_donation_view(request, pk):
 
             donation.status = 'Approved'
             donation.save()
+
+            # Keep donor eligibility state in sync
+            try:
+                donation.donor.last_donated_at = donation.date
+                donation.donor.save(update_fields=["last_donated_at"])
+            except Exception as exc:
+                # Do not block approval flow if donor profile update fails
+                logger.warning("Failed to update donor last_donated_at for donation %s: %s", pk, exc)
             
             messages.success(
                 request, 
@@ -1066,20 +1198,26 @@ def approve_donation_view(request, pk):
             )
             
             # Detailed logging
-            print(f"BLOOD DONATION APPROVED - ID: {pk}, Donor: {donor_name}, "
-                  f"Blood Group: {donation_blood_group}, Units: {donation_blood_unit}ml, "
-                  f"Old Stock: {old_stock}ml, New Stock: {stock.unit}ml")
+            logger.info(
+                "BLOOD DONATION APPROVED - ID: %s, Donor: %s, Blood Group: %s, Units: %sml, Old Stock: %sml, New Stock: %sml",
+                pk,
+                donor_name,
+                donation_blood_group,
+                donation_blood_unit,
+                old_stock,
+                stock.unit,
+            )
                   
         except models.Stock.DoesNotExist:
             messages.error(request, f'❌ Error: Blood group {donation_blood_group} not found in stock database.')
-            print(f"ERROR: Stock not found for blood group {donation_blood_group}")
+            logger.error("Stock not found for blood group %s", donation_blood_group)
             
     except dmodels.BloodDonate.DoesNotExist:
         messages.error(request, '❌ Error: Donation record not found.')
-        print(f"ERROR: BloodDonate with ID {pk} not found")
+        logger.error("BloodDonate with ID %s not found", pk)
     except Exception as e:
         messages.error(request, f'❌ System Error: {str(e)}')
-        print(f"ERROR in approve_donation_view: {str(e)}")
+        logger.exception("Error in approve_donation_view")
     
     return redirect('admin-donation')
 
@@ -1113,15 +1251,20 @@ def reject_donation_view(request, pk):
         )
         
         # Log the transaction
-        print(f"BLOOD DONATION REJECTED - ID: {pk}, Donor: {donor_name}, "
-              f"Blood Group: {donation_blood_group}, Units: {donation_blood_unit}ml")
+        logger.info(
+            "BLOOD DONATION REJECTED - ID: %s, Donor: %s, Blood Group: %s, Units: %sml",
+            pk,
+            donor_name,
+            donation_blood_group,
+            donation_blood_unit,
+        )
               
     except dmodels.BloodDonate.DoesNotExist:
         messages.error(request, '❌ Error: Donation record not found.')
-        print(f"ERROR: BloodDonate with ID {pk} not found")
+        logger.error("BloodDonate with ID %s not found", pk)
     except Exception as e:
         messages.error(request, f'❌ System Error: {str(e)}')
-        print(f"ERROR in reject_donation_view: {str(e)}")
+        logger.exception("Error in reject_donation_view")
     
     return redirect('admin-donation')
 
@@ -1160,16 +1303,27 @@ def admin_donation_view(request):
     pending_units = donations.filter(status='Pending').aggregate(Sum('unit'))
     total_pending_units = pending_units['unit__sum'] if pending_units['unit__sum'] else 0
     
-    # Debug information
-    print(f"ADMIN DONATION VIEW DEBUG:")
-    print(f"Total donations found: {total_donations}")
-    print(f"Pending: {pending_donations}, Approved: {approved_donations}, Rejected: {rejected_donations}")
-    
+    # Debug information (opt-in via logging)
+    logger.debug("ADMIN DONATION VIEW")
+    logger.debug("Total donations found: %s", total_donations)
+    logger.debug(
+        "Pending: %s, Approved: %s, Rejected: %s",
+        pending_donations,
+        approved_donations,
+        rejected_donations,
+    )
+
     # Log recent donations for debugging
     for donation in donations[:5]:
-        print(f"- ID: {donation.id}, Donor: {donation.donor.get_name}, "
-              f"Blood Group: {donation.bloodgroup}, Units: {donation.unit}ml, "
-              f"Status: {donation.status}, Date: {donation.date}")
+        logger.debug(
+            "Donation - ID: %s, Donor: %s, Blood Group: %s, Units: %sml, Status: %s, Date: %s",
+            donation.id,
+            donation.donor.get_name,
+            donation.bloodgroup,
+            donation.unit,
+            donation.status,
+            donation.date,
+        )
     
     context = {
         'donations': donations,
@@ -1804,10 +1958,13 @@ def quick_request_view(request):
             )
             
             # Log the quick request for admin monitoring
-            print(
-                f"QUICK REQUEST SUBMITTED - ID: {blood_request.id}, "
-                f"Patient: {patient_name}, Blood Group: {bloodgroup}, "
-                f"Units: {unit}ml, Contact: {contact_number}"
+            logger.info(
+                "QUICK REQUEST SUBMITTED - ID: %s, Patient: %s, Blood Group: %s, Units: %sml, Contact: %s",
+                blood_request.id,
+                patient_name,
+                bloodgroup,
+                unit,
+                contact_number,
             )
 
             try:
@@ -1825,7 +1982,7 @@ def quick_request_view(request):
             return redirect('quick-request-success', request_id=blood_request.id)
             
         except Exception as e:
-            print(f"Error creating quick blood request: {str(e)}")
+            logger.exception("Error creating quick blood request")
             messages.error(request, f'Error submitting request: {str(e)}')
     
     return render(request, 'blood/quick_request.html', context)

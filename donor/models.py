@@ -2,6 +2,8 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
+from django.conf import settings
+from datetime import timedelta
 
 class Donor(models.Model):
     user=models.OneToOneField(User,on_delete=models.CASCADE)
@@ -31,6 +33,45 @@ class Donor(models.Model):
     is_available = models.BooleanField(default=True)
     availability_updated_at = models.DateTimeField(null=True, blank=True)
     last_notified_at = models.DateTimeField(null=True, blank=True)
+
+    # Medical + eligibility features (kept optional for backward compatibility)
+    sex = models.CharField(
+        max_length=1,
+        choices=(('M', 'Male'), ('F', 'Female'), ('O', 'Other'), ('U', 'Prefer not to say')),
+        default='U',
+    )
+    date_of_birth = models.DateField(null=True, blank=True)
+    weight_kg = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(300)],
+    )
+    hemoglobin_g_dl = models.DecimalField(
+        max_digits=4,
+        decimal_places=1,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(25)],
+        help_text="Optional. Typical eligibility is ~12.5+ g/dL.",
+    )
+    blood_pressure_systolic = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(50), MaxValueValidator(250)],
+    )
+    blood_pressure_diastolic = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(30), MaxValueValidator(150)],
+    )
+    has_chronic_disease = models.BooleanField(default=False)
+    chronic_disease_details = models.CharField(max_length=255, blank=True)
+    on_medication = models.BooleanField(default=False)
+    medication_details = models.CharField(max_length=255, blank=True)
+    smokes = models.BooleanField(default=False)
+
+    # Donation recovery tracking
+    last_donated_at = models.DateField(null=True, blank=True)
    
     @property
     def get_name(self):
@@ -51,6 +92,26 @@ class Donor(models.Model):
         self.is_available = available
         self.availability_updated_at = timezone.now()
         self.save(update_fields=["is_available", "availability_updated_at"])
+
+    @property
+    def age_years(self):
+        if not self.date_of_birth:
+            return None
+        today = timezone.now().date()
+        years = today.year - self.date_of_birth.year
+        if (today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day):
+            years -= 1
+        return years
+
+    @property
+    def donation_recovery_days(self) -> int:
+        return int(getattr(settings, "DONATION_RECOVERY_DAYS", 56))
+
+    @property
+    def next_eligible_donation_date(self):
+        if not self.last_donated_at:
+            return None
+        return self.last_donated_at + timedelta(days=self.donation_recovery_days)
 
 class BloodDonate(models.Model): 
     donor=models.ForeignKey(Donor,on_delete=models.CASCADE)   

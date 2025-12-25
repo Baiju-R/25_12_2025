@@ -1,0 +1,235 @@
+{% extends 'blood/adminbase.html' %}
+{% block content %}
+{% load static %}
+
+<style>
+    .recommend-wrap {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px 0;
+    }
+
+    .card-shell {
+        background: #fff;
+        border-radius: 20px;
+        box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+        padding: 25px;
+    }
+
+    .title {
+        color: #2c3e50;
+        font-weight: 800;
+        margin-bottom: 10px;
+    }
+
+    .sub {
+        color: #5a6c7d;
+        font-weight: 500;
+        margin-bottom: 20px;
+    }
+
+    .pill {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: white;
+        background: linear-gradient(45deg, #e74c3c, #c0392b);
+    }
+
+    .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .meta-item {
+        background: #f8f9fa;
+        border-radius: 14px;
+        padding: 12px 14px;
+        border-left: 4px solid #667eea;
+    }
+
+    .meta-k { color: #7f8c8d; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
+    .meta-v { color: #2c3e50; font-weight: 700; margin-top: 4px; }
+
+    .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+    }
+
+    .btn-action {
+        border: none;
+        border-radius: 18px;
+        padding: 10px 16px;
+        font-weight: 800;
+        color: white;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        font-size: 0.85rem;
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    .btn-back { background: linear-gradient(45deg, #3498db, #2980b9); }
+    .btn-approve { background: linear-gradient(45deg, #27ae60, #2ecc71); }
+    .btn-reject { background: linear-gradient(45deg, #e74c3c, #c0392b); }
+
+    .table {
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    }
+
+    .table thead th {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.85rem;
+        padding: 14px 12px;
+    }
+
+    .table td {
+        vertical-align: top;
+        padding: 12px;
+        font-weight: 500;
+        border-color: #ecf0f1;
+    }
+
+    .score {
+        font-weight: 900;
+        color: #27ae60;
+    }
+
+    .reason-list {
+        margin: 0;
+        padding-left: 18px;
+        color: #2c3e50;
+    }
+
+    .empty {
+        background: linear-gradient(45deg, #3498db, #2980b9);
+        color: white;
+        padding: 18px;
+        border-radius: 16px;
+        font-weight: 700;
+    }
+
+    .rules {
+        background: #f8f9fa;
+        border-radius: 16px;
+        padding: 14px 16px;
+        border-left: 4px solid #27ae60;
+        margin-bottom: 18px;
+    }
+
+    .rules h5 { margin: 0 0 8px 0; font-weight: 900; color: #2c3e50; }
+    .rules ul { margin: 0; padding-left: 18px; color: #5a6c7d; font-weight: 600; }
+</style>
+
+<div class="recommend-wrap">
+    <div class="container">
+        <div class="card-shell">
+            <h2 class="title">Smart Donor Recommendations</h2>
+            <p class="sub">Review recommended donors and the reasons before approving this request.</p>
+
+            <div class="meta-grid">
+                <div class="meta-item">
+                    <div class="meta-k">Patient</div>
+                    <div class="meta-v">{{ blood_request.patient_name }}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-k">Blood Group</div>
+                    <div class="meta-v"><span class="pill">{{ blood_request.bloodgroup }}</span></div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-k">Units</div>
+                    <div class="meta-v">{{ blood_request.unit }} ml</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-k">Urgent</div>
+                    <div class="meta-v">{% if blood_request.is_urgent %}Yes{% else %}No{% endif %}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-k">Request Zipcode</div>
+                    <div class="meta-v">{% if blood_request.request_zipcode %}{{ blood_request.request_zipcode }}{% else %}—{% endif %}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-k">Status</div>
+                    <div class="meta-v">{{ blood_request.status }}</div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <a class="btn-action btn-back" href="{% url 'admin-request' %}">Back to Requests</a>
+                <a class="btn-action btn-approve" href="{% url 'approve-request' blood_request.id %}">Approve Request</a>
+                <a class="btn-action btn-reject" href="{% url 'reject-request' blood_request.id %}">Reject Request</a>
+            </div>
+
+            <div class="rules">
+                <h5>Eligibility rules used</h5>
+                <ul>
+                    <li>Only donors with exact blood group match are considered</li>
+                    <li>Recovery window: {{ recovery_days }} days since last approved donation</li>
+                    <li>If provided: age must be 18–65, weight must meet minimum, hemoglobin must meet threshold</li>
+                </ul>
+            </div>
+
+            {% if recommendations %}
+                <div class="table-responsive">
+                    <table class="table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Donor</th>
+                                <th>Contact</th>
+                                <th>Eligibility</th>
+                                <th>Score</th>
+                                <th>Reasons</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rec in recommendations %}
+                                <tr>
+                                    <td>
+                                        <div style="font-weight: 900; color:#2c3e50;">{{ rec.donor.get_name }}</div>
+                                        <div style="color:#7f8c8d; font-weight:700;">{{ rec.donor.bloodgroup }}</div>
+                                    </td>
+                                    <td>
+                                        <div><strong>Mobile:</strong> {{ rec.donor.mobile }}</div>
+                                        <div><strong>Zip:</strong> {% if rec.donor.zipcode %}{{ rec.donor.zipcode }}{% else %}—{% endif %}</div>
+                                        <div><strong>Distance:</strong> {% if rec.distance_km %}{{ rec.distance_km|floatformat:1 }} km{% else %}—{% endif %}</div>
+                                    </td>
+                                    <td>
+                                        <div><strong>Eligible:</strong> {% if rec.eligible %}Yes{% else %}No{% endif %}</div>
+                                        <div><strong>Last donated:</strong> {% if rec.donor.last_donated_at %}{{ rec.donor.last_donated_at }}{% else %}—{% endif %}</div>
+                                        <div><strong>Next eligible:</strong> {% if rec.next_eligible_date %}{{ rec.next_eligible_date }}{% else %}—{% endif %}</div>
+                                    </td>
+                                    <td class="score">{{ rec.score|floatformat:1 }}</td>
+                                    <td>
+                                        <ul class="reason-list">
+                                            {% for r in rec.reasons %}
+                                                <li>{{ r }}</li>
+                                            {% endfor %}
+                                        </ul>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty">
+                    No eligible donors found with the current recovery + medical rules. Consider updating donor medical profiles or checking availability.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock content %}

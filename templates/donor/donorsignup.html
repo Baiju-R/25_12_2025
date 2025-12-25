@@ -612,6 +612,21 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group">
+                                    <label class="form-label">Zipcode <small class="text-muted" style="text-transform:none;">(recommended)</small></label>
+                                    {% render_field donorForm.zipcode class="form-control" placeholder="e.g. 560001" %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Sex <small class="text-muted" style="text-transform:none;">(optional)</small></label>
+                                    {% render_field donorForm.sex class="form-control" %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
                                     <label class="form-label">Latitude <small class="text-muted" style="text-transform:none;">(optional)</small></label>
                                     <div class="input-group">
                                         {% render_field donorForm.latitude class="form-control" placeholder="e.g. 12.971599" %}
@@ -653,6 +668,90 @@
                             <label class="form-label">Profile Picture (optional)</label>
                             {% render_field donorForm.profile_pic class="form-control-file" %}
                         </div>
+                    </div>
+
+                    <!-- Medical Screening Section (Optional but improves smart recommendations) -->
+                    <div class="form-section">
+                        <h4 class="section-title">
+                            <i class="fas fa-notes-medical"></i>
+                            Medical Screening (Recommended)
+                        </h4>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Date of Birth <small class="text-muted" style="text-transform:none;">(optional)</small></label>
+                                    {% render_field donorForm.date_of_birth class="form-control" type="date" %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Weight (kg) <small class="text-muted" style="text-transform:none;">(optional)</small></label>
+                                    {% render_field donorForm.weight_kg class="form-control" placeholder="e.g. 60" %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Hemoglobin (g/dL) <small class="text-muted" style="text-transform:none;">(optional)</small></label>
+                                    {% render_field donorForm.hemoglobin_g_dl class="form-control" placeholder="e.g. 13.5" %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Blood Pressure <small class="text-muted" style="text-transform:none;">(optional)</small></label>
+                                    <div class="row">
+                                        <div class="col-6">
+                                            {% render_field donorForm.blood_pressure_systolic class="form-control" placeholder="Systolic" %}
+                                        </div>
+                                        <div class="col-6">
+                                            {% render_field donorForm.blood_pressure_diastolic class="form-control" placeholder="Diastolic" %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label">Chronic Disease?</label>
+                                    {% render_field donorForm.has_chronic_disease class="form-control" %}
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <div class="form-group">
+                                    <label class="form-label">Chronic Disease Details <small class="text-muted" style="text-transform:none;">(optional)</small></label>
+                                    {% render_field donorForm.chronic_disease_details class="form-control" placeholder="e.g. diabetes, hypertension" %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label">On Medication?</label>
+                                    {% render_field donorForm.on_medication class="form-control" %}
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <div class="form-group">
+                                    <label class="form-label">Medication Details <small class="text-muted" style="text-transform:none;">(optional)</small></label>
+                                    {% render_field donorForm.medication_details class="form-control" placeholder="e.g. insulin, BP tablets" %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label">Smoking?</label>
+                                    {% render_field donorForm.smokes class="form-control" %}
+                                </div>
+                            </div>
+                        </div>
+                        <small class="text-muted">These fields help the admin see eligibility and recovery-based recommendations.</small>
                     </div>
 
                     <button type="submit" class="btn btn-signup" id="submitBtn">

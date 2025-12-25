@@ -27,7 +27,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-xp^wz=i&8%o*%@2)7#k-7w7fhx
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost,testserver').split(',')
 
 
 # Application definition
@@ -171,6 +171,8 @@ SESSION_COOKIE_AGE = 3600  # 1 hour
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
 # Logging configuration
+# NOTE: SQL logging is very noisy; keep it opt-in.
+LOG_SQL = os.getenv('LOG_SQL', 'false').lower() == 'true'
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -186,7 +188,7 @@ LOGGING = {
     'loggers': {
         'django.db.backends': {
             'handlers': ['console'],
-            'level': 'DEBUG' if DEBUG else 'INFO',
+            'level': 'DEBUG' if LOG_SQL else 'INFO',
             'propagate': False,
         },
     },

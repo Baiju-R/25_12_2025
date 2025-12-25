@@ -186,8 +186,20 @@
         box-shadow: 0 8px 25px rgba(231, 76, 60, 0.4);
         color: white;
     }
+
+    .btn-recommend {
+        background: linear-gradient(45deg, #3498db, #2980b9);
+        color: white;
+        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+    }
+
+    .btn-recommend:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
+        color: white;
+    }
     
-    .btn-approve a, .btn-reject a {
+    .btn-approve a, .btn-reject a, .btn-recommend {
         color: white !important;
         text-decoration: none !important;
     }
@@ -434,6 +446,9 @@
                             </td>
                             <td>
                                 <div class="action-buttons">
+                                    <a class="action-btn btn-recommend" href="{% url 'admin-request-recommendations' blood_request.id %}">
+                                        <i class="fas fa-brain"></i> Review & Recommend
+                                    </a>
                                     <button class="btn action-btn btn-approve">
                                         <a href="{% url 'approve-request' blood_request.id %}" onclick="return confirm('Are you sure you want to APPROVE this blood request? This will deduct blood from stock.')">
                                             <i class="fas fa-check"></i> Approve

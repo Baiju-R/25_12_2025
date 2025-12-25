@@ -17,73 +17,73 @@ def donorsignup_view(request):
     userForm = DonorUserForm()
     donorForm = DonorForm()
     mydict = {'userForm': userForm, 'donorForm': donorForm}
-    
+
     if request.method == 'POST':
         userForm = DonorUserForm(request.POST)
         donorForm = DonorForm(request.POST, request.FILES)
-        
-        print("POST Data:", request.POST)
-        print("User Form Valid:", userForm.is_valid())
-        print("Donor Form Valid:", donorForm.is_valid())
-        
+
+        logger.debug("Donor signup POST data: %s", request.POST)
+        logger.debug("Donor signup user form valid: %s", userForm.is_valid())
+        logger.debug("Donor signup donor form valid: %s", donorForm.is_valid())
+
         if userForm.errors:
-            print("User Form Errors:", userForm.errors)
+            logger.debug("Donor signup user form errors: %s", userForm.errors)
         if donorForm.errors:
-            print("Donor Form Errors:", donorForm.errors)
-        
+            logger.debug("Donor signup donor form errors: %s", donorForm.errors)
+
         if userForm.is_valid() and donorForm.is_valid():
             try:
                 # Create user
                 user = userForm.save(commit=False)
                 user.set_password(user.password)
                 user.save()
-                
+
                 # Create donor
                 donor = donorForm.save(commit=False)
                 donor.user = user
                 donor.save()
-                
+
                 # Add to donor group
                 my_donor_group, created = Group.objects.get_or_create(name='DONOR')
                 my_donor_group.user_set.add(user)
-                
+
                 messages.success(request, 'Donor account created successfully! You can now login.')
                 return redirect('donorlogin')
-                
+
             except Exception as e:
-                print("Error during donor signup:", str(e))
+                logger.exception("Error during donor signup")
                 messages.error(request, f'Error creating account: {str(e)}')
         else:
             # Form validation failed
             error_messages = []
-            
+
             # Collect user form errors
             for field, errors in userForm.errors.items():
                 for error in errors:
                     error_messages.append(f"{field.replace('_', ' ').title()}: {error}")
-            
+
             # Collect donor form errors
             for field, errors in donorForm.errors.items():
                 for error in errors:
                     error_messages.append(f"{field.replace('_', ' ').title()}: {error}")
-            
+
             for error in error_messages:
                 messages.error(request, error)
-    
+
     return render(request, 'donor/donorsignup.html', context=mydict)
 
 def donorlogin_view(request):
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
-        
-        print(f"Donor login attempt - Username: {username}")
-        
+
+        logger.debug("Donor login attempt - Username: %s", username)
+
         user = authenticate(request, username=username, password=password)
         if user is not None:
-            print(f"User authenticated: {user.username}")
-            print(f"User groups: {[g.name for g in user.groups.all()]}")
-            
+            logger.debug("User authenticated: %s", user.username)
+            logger.debug("User groups: %s", [g.name for g in user.groups.all()])
+
             if user.groups.filter(name='DONOR').exists():
                 login(request, user)
                 messages.success(request, f'Welcome back, {user.first_name}!')
@@ -91,29 +91,29 @@ def donorlogin_view(request):
             else:
                 messages.error(request, 'This account is not registered as a donor.')
         else:
-            print("Authentication failed")
+            logger.debug("Authentication failed")
             messages.error(request, 'Invalid username or password.')
-    
+
     return render(request, 'donor/donorlogin.html')
 
 @login_required
 def donor_dashboard_view(request):
-    print(f"DEBUG: Donor dashboard accessed by user: {request.user.username}")
-    print(f"DEBUG: User is authenticated: {request.user.is_authenticated}")
-    print(f"DEBUG: User groups: {[g.name for g in request.user.groups.all()]}")
+    logger.debug("Donor dashboard accessed by user: %s", request.user.username)
+    logger.debug("User is authenticated: %s", request.user.is_authenticated)
+    logger.debug("User groups: %s", [g.name for g in request.user.groups.all()])
     
     if not request.user.groups.filter(name='DONOR').exists():
-        print("DEBUG: User not in DONOR group, redirecting to login")
+        logger.debug("User not in DONOR group, redirecting to login")
         messages.error(request, 'Access denied. Donor account required.')
         return redirect('donorlogin')
     
     try:
         donor = Donor.objects.get(user=request.user)
-        print(f"DEBUG: Donor profile found: {donor.get_name}")
+        logger.debug("Donor profile found: %s", donor.get_name)
         
         # Add comprehensive debugging
         donations = BloodDonate.objects.filter(donor=donor)
-        print(f"DEBUG: Found {donations.count()} donations for donor")
+        logger.debug("Found %s donations for donor", donations.count())
         
         # Get donation statistics
         total_donations = donations.count()
@@ -137,7 +137,7 @@ def donor_dashboard_view(request):
         recent_donations = donations.order_by('-date')[:5]
         recent_requests = blood_requests.order_by('-date')[:5]
         
-        print(f"DEBUG: Donor statistics: Donations={total_donations}, Requests={requestmade}")
+        logger.debug("Donor statistics: Donations=%s, Requests=%s", total_donations, requestmade)
         
         context = {
             'donor': donor,
@@ -155,7 +155,7 @@ def donor_dashboard_view(request):
         }
         
     except Donor.DoesNotExist:
-        print(f"DEBUG: Donor profile not found for user: {request.user.username}")
+        logger.warning("Donor profile not found for user: %s", request.user.username)
         messages.error(request, 'Donor profile not found. Please contact support.')
         context = {
             'donor': None,
@@ -172,7 +172,7 @@ def donor_dashboard_view(request):
             'recent_requests': [],
         }
     except Exception as e:
-        print(f"Error in donor dashboard: {str(e)}")
+        logger.exception("Error in donor dashboard")
         messages.error(request, f'Dashboard error: {str(e)}')
         context = {
             'donor': None,
@@ -189,7 +189,7 @@ def donor_dashboard_view(request):
             'recent_requests': [],
         }
     
-    print(f"DEBUG: Rendering template with context keys: {list(context.keys())}")
+    logger.debug("Rendering donor dashboard with context keys: %s", list(context.keys()))
     return render(request, 'donor/donor_dashboard.html', context)
 
 @login_required
@@ -258,7 +258,7 @@ def donate_blood_view(request):
             return redirect('donor-history')
             
         except Exception as e:
-            print(f"Error creating blood donation: {str(e)}")
+            logger.exception("Error creating blood donation")
             messages.error(request, f'Error submitting donation: {str(e)}')
     
     return render(request, 'donor/donate_blood.html', {'donor': donor})
@@ -428,7 +428,7 @@ def donor_request_blood_view(request):
             return redirect('donor-request-history')
             
         except Exception as e:
-            print(f"Error creating blood request: {str(e)}")
+            logger.exception("Error creating blood request")
             messages.error(request, f'Error submitting request: {str(e)}')
     
     return render(request, 'donor/makerequest.html', {'donor': donor, 'form_data': form_data})

@@ -27,14 +27,14 @@ def patientsignup_view(request):
         patientForm = PatientForm(request.POST, request.FILES)
         
         # Debug form data
-        print("POST Data:", request.POST)
-        print("User Form Valid:", userForm.is_valid())
-        print("Patient Form Valid:", patientForm.is_valid())
+        logger.debug("Patient signup POST data: %s", request.POST)
+        logger.debug("Patient signup user form valid: %s", userForm.is_valid())
+        logger.debug("Patient signup patient form valid: %s", patientForm.is_valid())
         
         if userForm.errors:
-            print("User Form Errors:", userForm.errors)
+            logger.debug("Patient signup user form errors: %s", userForm.errors)
         if patientForm.errors:
-            print("Patient Form Errors:", patientForm.errors)
+            logger.debug("Patient signup patient form errors: %s", patientForm.errors)
         
         if userForm.is_valid() and patientForm.is_valid():
             try:
@@ -64,7 +64,7 @@ def patientsignup_view(request):
                     return redirect('patientlogin')
                     
             except Exception as e:
-                print("Error during signup:", str(e))
+                logger.exception("Error during patient signup")
                 messages.error(request, f'Error creating account: {str(e)}')
         else:
             # Form validation failed
@@ -91,12 +91,12 @@ def patientlogin_view(request):
         username = request.POST.get('username')
         password = request.POST.get('password')
         
-        print(f"Login attempt - Username: {username}")
+        logger.debug("Patient login attempt - Username: %s", username)
         
         user = authenticate(request, username=username, password=password)
         if user is not None:
-            print(f"User authenticated: {user.username}")
-            print(f"User groups: {[g.name for g in user.groups.all()]}")
+            logger.debug("User authenticated: %s", user.username)
+            logger.debug("User groups: %s", [g.name for g in user.groups.all()])
             
             if user.groups.filter(name='PATIENT').exists():
                 login(request, user)
@@ -105,7 +105,7 @@ def patientlogin_view(request):
             else:
                 messages.error(request, 'This account is not registered as a patient.')
         else:
-            print("Authentication failed")
+            logger.debug("Authentication failed")
             messages.error(request, 'Invalid username or password.')
     
     return render(request, 'patient/patientlogin.html')

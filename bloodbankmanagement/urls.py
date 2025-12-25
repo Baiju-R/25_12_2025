@@ -37,6 +37,7 @@ urlpatterns = [
     path('admin-donor-map/', blood_views.admin_donor_map_view, name='admin-donor-map'),
     path('admin-patient/', blood_views.admin_patient_view, name='admin-patient'),
     path('admin-request/', blood_views.admin_request_view, name='admin-request'),
+    path('admin-request/<int:pk>/recommendations/', blood_views.admin_request_recommendations_view, name='admin-request-recommendations'),
     path('admin-request-history/', blood_views.admin_request_history_view, name='admin-request-history'),
     path('admin-donation/', blood_views.admin_donation_view, name='admin-donation'),
     path('admin-analytics/', blood_views.admin_analytics_view, name='admin-analytics'),

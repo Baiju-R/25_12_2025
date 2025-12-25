@@ -14,6 +14,7 @@ class DonorFormGeoTests(TestCase):
 			'bloodgroup': 'A+',
 			'address': '221B Baker Street',
 			'mobile': '1234567890',
+			'sex': 'U',
 		}
 
 	def test_coordinates_optional_when_both_blank(self):
