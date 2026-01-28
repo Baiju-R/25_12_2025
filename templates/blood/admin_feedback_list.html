@@ -1,0 +1,105 @@
+{% extends 'blood/adminbase.html' %}
+{% load math_filters %}
+{% block content %}
+
+<style>
+    .fb-admin-page{padding:20px 0}
+    .fb-admin-card{background:rgba(255,255,255,0.98);border-radius:18px;box-shadow:0 18px 55px rgba(0,0,0,0.12);border:1px solid rgba(255,255,255,0.35)}
+    .fb-head{padding:18px 22px;border-bottom:1px solid rgba(226,232,240,0.9);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .fb-title{margin:0;font-weight:900;color:#2c3e50}
+    .fb-sub{color:#6b7280}
+    .fb-item{padding:18px 22px;border-bottom:1px solid rgba(226,232,240,0.8)}
+    .fb-item:last-child{border-bottom:0}
+    .fb-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .fb-meta{color:#64748b;font-weight:700}
+    .stars{color:#f1c40f;letter-spacing:1px}
+    .fb-message{margin-top:8px;color:#2c3e50;white-space:pre-wrap}
+    .fb-images{margin-top:10px;display:flex;gap:10px;flex-wrap:wrap}
+    .fb-img{width:110px;height:90px;object-fit:cover;border-radius:12px;border:1px solid rgba(226,232,240,0.9)}
+    .fb-badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:6px 12px;font-weight:800;font-size:0.85rem;border:1px solid rgba(226,232,240,0.9);background:rgba(248,250,252,0.95)}
+    .pill.public{border-color:rgba(34,197,94,0.35)}
+    .pill.private{border-color:rgba(239,68,68,0.35)}
+    .pill.reply{border-color:rgba(59,130,246,0.35)}
+    .fb-actions{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap}
+    .qa-btn{border-radius:12px;font-weight:900}
+</style>
+
+<div class="admin-dashboard">
+    <div class="container fb-admin-page">
+        <div class="fb-admin-card">
+            <div class="fb-head">
+                <div>
+                    <h3 class="fb-title"><i class="fas fa-comment-dots" style="color:#667eea"></i> Feedback Inbox</h3>
+                    <div class="fb-sub">Review feedback, set visibility, reply, and react with emojis.</div>
+                </div>
+                <a class="qa-btn" href="{% url 'admin-dashboard' %}" style="text-decoration:none;padding:10px 14px;border:1px solid rgba(226,232,240,0.9);background:rgba(255,255,255,0.95);color:#2c3e50;">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+
+            {% if feedbacks %}
+                {% for fb in feedbacks %}
+                    <div class="fb-item">
+                        <div class="fb-top">
+                            <div>
+                                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                                    <div style="font-weight:900;color:#0f172a;">{{ fb.author_label }}</div>
+                                    <div class="fb-meta">• {{ fb.feedback_for }} • {{ fb.created_at|date:"d M Y" }}</div>
+                                </div>
+                                <div class="stars" aria-label="rating">
+                                    {% star_range as stars %}
+                                    {% for i in stars %}
+                                        {% if fb.rating >= i %}★{% else %}☆{% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                                {% if fb.admin_reaction %}<span class="pill reply">Admin reaction: {{ fb.admin_reaction }}</span>{% endif %}
+                            </div>
+                        </div>
+
+                        <div class="fb-message">{{ fb.message }}</div>
+
+                        {% if fb.image1 or fb.image2 or fb.image3 %}
+                            <div class="fb-images">
+                                {% if fb.image1 %}<a href="{{ fb.image1.url }}" target="_blank"><img class="fb-img" src="{{ fb.image1.url }}" alt="feedback image 1"></a>{% endif %}
+                                {% if fb.image2 %}<a href="{{ fb.image2.url }}" target="_blank"><img class="fb-img" src="{{ fb.image2.url }}" alt="feedback image 2"></a>{% endif %}
+                                {% if fb.image3 %}<a href="{{ fb.image3.url }}" target="_blank"><img class="fb-img" src="{{ fb.image3.url }}" alt="feedback image 3"></a>{% endif %}
+                            </div>
+                        {% endif %}
+
+                        <div class="fb-badges">
+                            {% if fb.is_public %}
+                                <span class="pill public"><i class="fas fa-eye"></i> Public</span>
+                            {% else %}
+                                <span class="pill private"><i class="fas fa-eye-slash"></i> Hidden</span>
+                            {% endif %}
+                            {% if fb.admin_reply %}
+                                <span class="pill reply"><i class="fas fa-reply"></i> Replied</span>
+                            {% endif %}
+                        </div>
+
+                        {% if fb.admin_reply %}
+                            <div style="margin-top:10px;background:rgba(102,126,234,0.08);border:1px solid rgba(102,126,234,0.18);border-radius:14px;padding:12px 14px;">
+                                <div style="font-weight:900;color:#334155;">Admin Reply</div>
+                                <div style="white-space:pre-wrap;color:#1f2937;">{{ fb.admin_reply }}</div>
+                            </div>
+                        {% endif %}
+
+                        <div class="fb-actions">
+                            <a class="qa-btn" href="{% url 'admin-feedback-edit' fb.id %}" style="text-decoration:none;padding:10px 14px;border:1px solid rgba(226,232,240,0.9);background:rgba(255,255,255,0.95);color:#2c3e50;">
+                                <i class="fas fa-edit"></i> Reply / React
+                            </a>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div style="padding:22px;color:#6b7280;">No feedback submitted yet.</div>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+
+{% endblock content %}

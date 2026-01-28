@@ -1,17 +1,40 @@
 import logging
 
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group, User
 from django.contrib import messages
 from django.db.models import Sum
+from django.views.decorators.http import require_POST
 
 from blood.services import sms as sms_service
+from blood.forms import FeedbackForm
+from blood.models import Feedback
 from .forms import DonorUserForm, DonorForm
 from .models import Donor, BloodDonate
 
 logger = logging.getLogger(__name__)
+
+
+@login_required
+@require_POST
+def donor_set_availability_view(request):
+    if not request.user.groups.filter(name='DONOR').exists():
+        messages.error(request, 'Access denied. Donor account required.')
+        return redirect('donorlogin')
+
+    donor = get_object_or_404(Donor, user=request.user)
+    raw = (request.POST.get('available') or '').strip().lower()
+    available = raw in {'1', 'true', 'yes', 'on'}
+    donor.mark_availability(available)
+
+    if available:
+        messages.success(request, 'You are now marked as available for donation requests.')
+    else:
+        messages.warning(request, 'You are now marked as not available. Admins will not contact you for requests.')
+
+    return redirect('donor-dashboard')
 
 def donorsignup_view(request):
     userForm = DonorUserForm()
@@ -22,7 +45,7 @@ def donorsignup_view(request):
         userForm = DonorUserForm(request.POST)
         donorForm = DonorForm(request.POST, request.FILES)
 
-        logger.debug("Donor signup POST data: %s", request.POST)
+        logger.debug("Donor signup POST keys: %s", list(request.POST.keys()))
         logger.debug("Donor signup user form valid: %s", userForm.is_valid())
         logger.debug("Donor signup donor form valid: %s", donorForm.is_valid())
 
@@ -136,6 +159,7 @@ def donor_dashboard_view(request):
         # Get recent activities
         recent_donations = donations.order_by('-date')[:5]
         recent_requests = blood_requests.order_by('-date')[:5]
+        recent_feedbacks = Feedback.objects.filter(donor=donor).order_by('-created_at')[:5]
         
         logger.debug("Donor statistics: Donations=%s, Requests=%s", total_donations, requestmade)
         
@@ -152,6 +176,7 @@ def donor_dashboard_view(request):
             'request_approved': request_approved,
             'request_rejected': request_rejected,
             'recent_requests': recent_requests,
+            'recent_feedbacks': recent_feedbacks,
         }
         
     except Donor.DoesNotExist:
@@ -191,6 +216,32 @@ def donor_dashboard_view(request):
     
     logger.debug("Rendering donor dashboard with context keys: %s", list(context.keys()))
     return render(request, 'donor/donor_dashboard.html', context)
+
+
+@login_required
+def donor_feedback_create_view(request):
+    if not request.user.groups.filter(name='DONOR').exists():
+        messages.error(request, 'Access denied. Donor account required.')
+        return redirect('donorlogin')
+
+    donor = get_object_or_404(Donor, user=request.user)
+
+    form = FeedbackForm()
+    if request.method == 'POST':
+        form = FeedbackForm(request.POST, request.FILES)
+        if form.is_valid():
+            feedback = form.save(commit=False)
+            feedback.author_type = Feedback.AUTHOR_DONOR
+            feedback.donor = donor
+            feedback.patient = None
+            feedback.display_name = ''
+            feedback.is_public = True
+            feedback.save()
+            messages.success(request, 'Thanks! Your feedback has been submitted.')
+            return redirect('donor-dashboard')
+        messages.error(request, 'Please fix the errors in the feedback form.')
+
+    return render(request, 'donor/feedback_form.html', {'form': form})
 
 @login_required
 def donate_blood_view(request):
@@ -417,14 +468,42 @@ def donor_request_blood_view(request):
 
             if is_urgent:
                 try:
-                    sms_service.notify_matched_donors(blood_request, contact_number=donor.mobile)
+                    from blood import tasks as sms_tasks
+
+                    sms_tasks.send_urgent_alerts.delay(blood_request.pk, contact_number=donor.mobile)
                 except Exception as alert_error:  # pragma: no cover - defensive logging only
                     logger.error(
-                        "Failed to dispatch SNS alert for donor request %s: %s",
+                        "Failed to enqueue urgent alerts for donor request %s: %s; falling back to synchronous send",
                         blood_request.id,
                         alert_error,
                     )
-                sms_service.send_requester_confirmation(blood_request, donor.mobile)
+                    try:
+                        sms_service.notify_matched_donors(blood_request, contact_number=donor.mobile)
+                    except Exception as fallback_error:  # pragma: no cover
+                        logger.error(
+                            "Failed to dispatch SNS alert for donor request %s: %s",
+                            blood_request.id,
+                            fallback_error,
+                        )
+
+                try:
+                    from blood import tasks as sms_tasks
+
+                    sms_tasks.send_requester_confirmation_sms.delay(blood_request.pk, contact_number=donor.mobile)
+                except Exception as confirm_error:  # pragma: no cover
+                    logger.error(
+                        "Failed to enqueue requester confirmation for donor request %s: %s; falling back to synchronous send",
+                        blood_request.id,
+                        confirm_error,
+                    )
+                    try:
+                        sms_service.send_requester_confirmation(blood_request, donor.mobile)
+                    except Exception as fallback_error:  # pragma: no cover
+                        logger.error(
+                            "Failed to send requester confirmation for donor request %s: %s",
+                            blood_request.id,
+                            fallback_error,
+                        )
             return redirect('donor-request-history')
             
         except Exception as e:

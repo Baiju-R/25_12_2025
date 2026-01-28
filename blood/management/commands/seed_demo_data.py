@@ -27,6 +27,12 @@ class Command(BaseCommand):
         parser.add_argument("--patients", type=int, help="Number of patients to create (default random between 75-100)")
         parser.add_argument("--seed", type=int, help="Random seed for deterministic runs")
         parser.add_argument("--purge", action="store_true", help="Delete existing donors/patients/requests/donations before seeding")
+        parser.add_argument(
+            "--ratio-unavailable",
+            type=float,
+            default=0.18,
+            help="Fraction of donors initially marked unavailable (0.0-0.9). Default: 0.18",
+        )
 
     def handle(self, *args, **options):
         faker = Faker()
@@ -36,6 +42,8 @@ class Command(BaseCommand):
 
         donor_target = options.get("donors") or random.randint(75, 100)
         patient_target = options.get("patients") or random.randint(75, 100)
+        ratio_unavailable = float(options.get("ratio_unavailable") or 0.18)
+        ratio_unavailable = max(0.0, min(0.9, ratio_unavailable))
 
         if options.get("purge"):
             self._purge_existing()
@@ -46,7 +54,7 @@ class Command(BaseCommand):
         stock_cache = self._initialize_stock()
 
         with transaction.atomic():
-            donors = self._create_donors(donor_target, donor_group, faker)
+            donors = self._create_donors(donor_target, donor_group, faker, ratio_unavailable=ratio_unavailable)
             patients = self._create_patients(patient_target, patient_group, faker)
             donation_count = self._create_donations(donors, stock_cache, faker)
             request_count = self._create_requests(patients, donors, stock_cache, faker)
@@ -112,15 +120,22 @@ class Command(BaseCommand):
         group.user_set.add(user)
         return user
 
-    def _create_donors(self, target, donor_group, faker):
+    def _create_donors(self, target, donor_group, faker, *, ratio_unavailable: float = 0.18):
         donors = []
         for _ in range(target):
             user = self._create_user("donor_", donor_group, faker)
+            is_available = random.random() >= float(ratio_unavailable)
             donor = donor_models.Donor.objects.create(
                 user=user,
                 bloodgroup=random.choice(BLOOD_GROUPS),
                 address=faker.street_address(),
                 mobile=faker.msisdn()[:12],
+                is_available=is_available,
+                availability_updated_at=(
+                    timezone.now() - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23), minutes=random.randint(0, 59))
+                    if (not is_available or random.random() < 0.20)
+                    else None
+                ),
             )
             donors.append(donor)
         return donors

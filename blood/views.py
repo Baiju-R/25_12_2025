@@ -6,10 +6,13 @@ from datetime import date, timedelta, datetime
 
 from django.conf import settings
 from django.contrib import messages
+from django.views.decorators.http import require_POST
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group, User
 from django.core.serializers.json import DjangoJSONEncoder
+from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Sum, Q, Count, Max
 from django.db.models.functions import TruncMonth
 from django.http import HttpResponseRedirect, Http404, HttpResponse, JsonResponse
@@ -25,7 +28,9 @@ except ImportError:  # pragma: no cover - optional dependency
 from . import forms, models
 from .services.geocoding import geocode_address
 from .services import sms as sms_service
+from . import tasks as sms_tasks
 from .utils.sms_sender import send_sms
+from .utils.phone import normalize_phone_number
 from donor import forms as dforms
 from donor import models as dmodels
 from patient import forms as pforms
@@ -467,13 +472,7 @@ def _auto_assign_coordinates(limit: int | None = None):
     return successful, failures
 
 def home_view(request):
-    x = models.Stock.objects.all()
-    if len(x) == 0:
-        blood_groups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
-        for bg in blood_groups:
-            blood = models.Stock()
-            blood.bloodgroup = bg
-            blood.save()
+    _ensure_stock_rows_exist()
 
     top_donor_spotlight = []
     placeholder_avatar = static('image/homepage.png')
@@ -506,12 +505,114 @@ def home_view(request):
             'profile_pic_url': donor.profile_pic.url if donor.has_profile_pic else placeholder_avatar,
         })
 
+    # Homepage shows a small slideshow subset; full list is available at /feedback/all/.
+    public_feedbacks = (
+        models.Feedback.objects
+        .filter(is_public=True)
+        .select_related('donor__user', 'patient__user')
+        .order_by('-created_at')[:6]
+    )
+
     context = {
         'top_donor_spotlight': top_donor_spotlight,
         'has_top_donors': bool(top_donor_spotlight),
+        'public_feedbacks': public_feedbacks,
+        'has_public_feedbacks': bool(public_feedbacks),
     }
 
     return render(request, 'blood/index.html', context)
+
+
+def public_feedback_create_view(request):
+    """Anonymous feedback form (available from homepage)."""
+
+    if request.user.is_authenticated:
+        if request.user.is_superuser:
+            return redirect('admin-feedback-list')
+        if request.user.groups.filter(name='DONOR').exists():
+            return redirect('donor-feedback')
+        if request.user.groups.filter(name='PATIENT').exists():
+            return redirect('patient-feedback')
+
+    form = forms.FeedbackForm()
+    if request.method == 'POST':
+        form = forms.FeedbackForm(request.POST, request.FILES)
+        if form.is_valid():
+            feedback = form.save(commit=False)
+            feedback.author_type = models.Feedback.AUTHOR_ANONYMOUS
+            feedback.donor = None
+            feedback.patient = None
+            feedback.is_public = True
+            feedback.save()
+            messages.success(request, 'Thanks! Your feedback has been submitted.')
+            return redirect('home')
+        messages.error(request, 'Please fix the errors in the feedback form.')
+
+    return render(request, 'blood/feedback_form.html', {'form': form, 'title': 'Share Feedback'})
+
+
+def public_feedback_list_view(request):
+    qs = (
+        models.Feedback.objects
+        .filter(is_public=True)
+        .select_related('donor__user', 'patient__user')
+        .order_by('-created_at')
+    )
+    paginator = Paginator(qs, 12)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    return render(request, 'blood/feedback_list.html', {'page_obj': page_obj})
+
+
+def terms_and_conditions_view(request):
+    return render(
+        request,
+        'blood/terms_and_conditions.html',
+        {
+            'last_updated': timezone.now().date(),
+        },
+    )
+
+
+@login_required
+def admin_feedback_list_view(request):
+    if not request.user.is_superuser:
+        return redirect('adminlogin')
+
+    feedbacks = (
+        models.Feedback.objects
+        .select_related('donor__user', 'patient__user')
+        .order_by('-created_at')
+    )
+
+    return render(request, 'blood/admin_feedback_list.html', {'feedbacks': feedbacks})
+
+
+@login_required
+def admin_feedback_edit_view(request, pk: int):
+    if not request.user.is_superuser:
+        return redirect('adminlogin')
+
+    feedback = get_object_or_404(models.Feedback, pk=pk)
+    form = forms.AdminFeedbackModerationForm(instance=feedback)
+    if request.method == 'POST':
+        form = forms.AdminFeedbackModerationForm(request.POST, instance=feedback)
+        if form.is_valid():
+            updated = form.save(commit=False)
+            updated.admin_updated_at = timezone.now()
+            updated.save(update_fields=['is_public', 'admin_reaction', 'admin_reply', 'admin_updated_at'])
+            messages.success(request, 'Feedback updated.')
+            return redirect('admin-feedback-list')
+        messages.error(request, 'Please fix the errors and try again.')
+
+    return render(
+        request,
+        'blood/admin_feedback_edit.html',
+        {
+            'feedback': feedback,
+            'form': form,
+        },
+    )
 
 def adminlogin_view(request):
     if request.method == 'POST':
@@ -528,6 +629,8 @@ def adminlogin_view(request):
     return render(request, 'blood/adminlogin.html')
 
 def afterlogin_view(request):
+    if not request.user.is_authenticated:
+        return redirect('home')
     if request.user.is_superuser:
         return redirect('admin-dashboard')
     elif request.user.groups.filter(name='DONOR').exists():
@@ -537,6 +640,18 @@ def afterlogin_view(request):
     else:
         return redirect('home')
 
+
+def _ensure_stock_rows_exist():
+    """Ensure all 8 blood group stock rows exist.
+
+    Some admin views assume these rows exist and use `.get()`. Home view seeds
+    them, but admins can directly open dashboards first.
+    """
+
+    blood_groups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
+    for bg in blood_groups:
+        models.Stock.objects.get_or_create(bloodgroup=bg, defaults={'unit': 0})
+
 def logout_view(request):
     logout(request)
     return redirect('home')
@@ -545,6 +660,8 @@ def logout_view(request):
 def admin_dashboard_view(request):
     if not request.user.is_superuser:
         return redirect('adminlogin')
+
+    _ensure_stock_rows_exist()
     
     # Fix total unit calculation
     totalunit = models.Stock.objects.aggregate(Sum('unit'))
@@ -653,6 +770,15 @@ def admin_dashboard_view(request):
         cls=DjangoJSONEncoder,
     )
 
+    latest_feedbacks = (
+        models.Feedback.objects
+        .select_related('donor__user', 'patient__user')
+        .order_by('-created_at')[:5]
+    )
+    feedback_total = models.Feedback.objects.count()
+    feedback_public = models.Feedback.objects.filter(is_public=True).count()
+    feedback_needs_reply = models.Feedback.objects.filter(is_public=True, admin_reply='', admin_reaction='').count()
+
     dict={
         'A1':models.Stock.objects.get(bloodgroup="A+"),
         'A2':models.Stock.objects.get(bloodgroup="A-"),
@@ -682,6 +808,10 @@ def admin_dashboard_view(request):
         'dashboard_stock_chart': dashboard_stock_chart,
         'dashboard_activity_chart': dashboard_activity_chart,
         'dashboard_request_status_chart': dashboard_request_status_chart,
+        'latest_feedbacks': latest_feedbacks,
+        'feedback_total': feedback_total,
+        'feedback_public': feedback_public,
+        'feedback_needs_reply': feedback_needs_reply,
     }
     return render(request, 'blood/admin_dashboard.html', context=dict)
 
@@ -689,6 +819,8 @@ def admin_dashboard_view(request):
 def admin_blood_view(request):
     if not request.user.is_superuser:
         return redirect('adminlogin')
+
+    _ensure_stock_rows_exist()
     dict={
         'bloodForm':forms.BloodForm(),
         'A1':models.Stock.objects.get(bloodgroup="A+"),
@@ -715,7 +847,7 @@ def admin_blood_view(request):
 def admin_donor_view(request):
     if not request.user.is_superuser:
         return redirect('adminlogin')
-    donors = dmodels.Donor.objects.all()
+    donors = dmodels.Donor.objects.select_related('user').order_by('-is_available', 'user__first_name', 'user__last_name', 'id')
     return render(request, 'blood/admin_donor.html', {'donors': donors})
 
 
@@ -866,16 +998,26 @@ def admin_donor_map_view(request):
 def update_donor_view(request, pk):
     if not request.user.is_superuser:
         return redirect('adminlogin')
-    donor = dmodels.Donor.objects.get(id=pk)
-    user = User.objects.get(id=donor.user_id)
+    donor = get_object_or_404(dmodels.Donor.objects.select_related('user'), id=pk)
+    user = donor.user
     if request.method == 'POST':
         userForm = dforms.DonorUserUpdateForm(request.POST, instance=user)
         donorForm = dforms.DonorForm(request.POST, request.FILES, instance=donor)
         if userForm.is_valid() and donorForm.is_valid():
-            userForm.save()
-            donorForm.save()
-            messages.success(request, 'Donor profile updated successfully.')
-            return redirect('admin-donor')
+            try:
+                with transaction.atomic():
+                    coords_were_mismatched = (donor.latitude is None) != (donor.longitude is None)
+                    userForm.save()
+                    donorForm.save()
+                messages.success(request, 'Donor profile updated successfully.')
+                if coords_were_mismatched:
+                    messages.warning(request, 'This donor had incomplete coordinates (only latitude or longitude). Coordinates were cleared during save; you can re-add both to pin on the map.')
+                return redirect('admin-donor')
+            except Exception as exc:
+                logger.exception("Failed to update donor %s", donor.id)
+                messages.error(request, f'Could not update donor: {exc}')
+        else:
+            messages.error(request, 'Please correct the highlighted errors and try again.')
     else:
         userForm = dforms.DonorUserUpdateForm(instance=user)
         donorForm = dforms.DonorForm(instance=donor)
@@ -884,13 +1026,18 @@ def update_donor_view(request, pk):
 
 
 @login_required
+@require_POST
 def delete_donor_view(request, pk):
     if not request.user.is_superuser:
         return redirect('adminlogin')
-    donor = dmodels.Donor.objects.get(id=pk)
-    user = User.objects.get(id=donor.user_id)
-    user.delete()
-    donor.delete()
+    donor = get_object_or_404(dmodels.Donor.objects.select_related('user'), id=pk)
+    try:
+        with transaction.atomic():
+            donor.user.delete()  # cascades to donor
+        messages.success(request, 'Donor deleted successfully.')
+    except Exception as exc:
+        logger.exception("Failed to delete donor %s", donor.id)
+        messages.error(request, f'Could not delete donor: {exc}')
     return redirect('admin-donor')
 
 @login_required
@@ -905,16 +1052,23 @@ def admin_patient_view(request):
 def update_patient_view(request, pk):
     if not request.user.is_superuser:
         return redirect('adminlogin')
-    patient = pmodels.Patient.objects.get(id=pk)
-    user = User.objects.get(id=patient.user_id)
+    patient = get_object_or_404(pmodels.Patient.objects.select_related('user'), id=pk)
+    user = patient.user
     if request.method == 'POST':
         userForm = pforms.PatientUserUpdateForm(request.POST, instance=user)
         patientForm = pforms.PatientForm(request.POST, request.FILES, instance=patient)
         if userForm.is_valid() and patientForm.is_valid():
-            userForm.save()
-            patientForm.save()
-            messages.success(request, 'Patient profile updated successfully.')
-            return redirect('admin-patient')
+            try:
+                with transaction.atomic():
+                    userForm.save()
+                    patientForm.save()
+                messages.success(request, 'Patient profile updated successfully.')
+                return redirect('admin-patient')
+            except Exception as exc:
+                logger.exception("Failed to update patient %s", patient.id)
+                messages.error(request, f'Could not update patient: {exc}')
+        else:
+            messages.error(request, 'Please correct the highlighted errors and try again.')
     else:
         userForm = pforms.PatientUserUpdateForm(instance=user)
         patientForm = pforms.PatientForm(instance=patient)
@@ -923,13 +1077,18 @@ def update_patient_view(request, pk):
 
 
 @login_required
+@require_POST
 def delete_patient_view(request, pk):
     if not request.user.is_superuser:
         return redirect('adminlogin')
-    patient = pmodels.Patient.objects.get(id=pk)
-    user = User.objects.get(id=patient.user_id)
-    user.delete()
-    patient.delete()
+    patient = get_object_or_404(pmodels.Patient.objects.select_related('user'), id=pk)
+    try:
+        with transaction.atomic():
+            patient.user.delete()  # cascades to patient
+        messages.success(request, 'Patient deleted successfully.')
+    except Exception as exc:
+        logger.exception("Failed to delete patient %s", patient.id)
+        messages.error(request, f'Could not delete patient: {exc}')
     return redirect('admin-patient')
 
 @login_required
@@ -1022,53 +1181,78 @@ def admin_request_recommendations_view(request, pk):
     # Show recommendations even if request already processed (read-only insights), but default UX is for Pending.
     recommendations = recommend_donors_for_request(blood_request, limit=10, require_eligible=True)
 
+    raw_requester_contact = sms_service._resolve_contact_number(blood_request, None)
+    requester_contact_normalized = normalize_phone_number(raw_requester_contact)
+    top_recommended_donor_normalized = None
+    if recommendations:
+        top_recommended_donor_normalized = normalize_phone_number(getattr(recommendations[0].donor, 'mobile', None))
+
     context = {
         'blood_request': blood_request,
         'recommendations': recommendations,
         'recovery_days': int(getattr(settings, 'DONATION_RECOVERY_DAYS', 56)),
+        'requester_contact_normalized': requester_contact_normalized,
+        'top_recommended_donor_normalized': top_recommended_donor_normalized,
     }
     return render(request, 'blood/admin_request_recommendations.html', context)
 
+
+def _store_approval_sms_diagnostics(blood_request: models.BloodRequest, result: dict) -> None:
+    patient_to = (result.get('patient') or {}).get('to') or ''
+    donor_to = (result.get('donor') or {}).get('to') or ''
+    models.BloodRequest.objects.filter(pk=blood_request.pk).update(
+        sms_last_approval_attempt_at=timezone.now(),
+        sms_last_approval_patient_to=str(patient_to)[:32],
+        sms_last_approval_donor_to=str(donor_to)[:32],
+        sms_last_approval_result=result,
+    )
+
 @login_required
+@require_POST
 def update_approve_status_view(request, pk):
     if not request.user.is_superuser:
         return redirect('adminlogin')
     
     try:
-        blood_request = models.BloodRequest.objects.get(id=pk)
-        
-        # Check if already processed
-        if blood_request.status != 'Pending':
-            messages.warning(request, f'This request has already been {blood_request.status.lower()}.')
-            return redirect('admin-request')
-        
-        # Get request details
-        request_blood_group = blood_request.bloodgroup
-        request_blood_unit = blood_request.unit
-        patient_name = blood_request.patient_name
-        
-        try:
-            # Check stock availability
-            stock = models.Stock.objects.get(bloodgroup=request_blood_group)
-            
+        with transaction.atomic():
+            blood_request = models.BloodRequest.objects.select_for_update().get(id=pk)
+
+            # Check if already processed
+            if blood_request.status != 'Pending':
+                messages.warning(request, f'This request has already been {blood_request.status.lower()}.')
+                return redirect('admin-request')
+
+            # Get request details
+            request_blood_group = blood_request.bloodgroup
+            request_blood_unit = blood_request.unit
+            patient_name = blood_request.patient_name
+
+            try:
+                # Lock stock row to avoid race conditions.
+                stock = models.Stock.objects.select_for_update().get(bloodgroup=request_blood_group)
+            except models.Stock.DoesNotExist:
+                messages.error(request, f'❌ Error: Blood group {request_blood_group} not found in stock database.')
+                return redirect('admin-request')
+
             if stock.unit >= request_blood_unit:
-                # Sufficient stock available - approve request
+                old_stock = stock.unit
                 stock.unit = stock.unit - request_blood_unit
-                stock.save()
-                
+                stock.save(update_fields=['unit'])
+
                 blood_request.status = "Approved"
-                blood_request.save()
-                
+                blood_request.save(update_fields=['status'])
+
                 # Success message with details
                 messages.success(
-                    request, 
+                    request,
                     f'✅ Request Approved Successfully!\n'
                     f'Patient: {patient_name}\n'
                     f'Blood Group: {request_blood_group}\n'
                     f'Units Allocated: {request_blood_unit}ml\n'
+                    f'Previous Stock: {old_stock}ml\n'
                     f'Remaining Stock: {stock.unit}ml'
                 )
-                
+
                 # Log the transaction for audit trail
                 logger.info(
                     "BLOOD REQUEST APPROVED - ID: %s, Patient: %s, Blood Group: %s, Units: %sml, Remaining Stock: %sml",
@@ -1078,11 +1262,11 @@ def update_approve_status_view(request, pk):
                     request_blood_unit,
                     stock.unit,
                 )
-                      
+
             else:
                 # Insufficient stock
                 messages.error(
-                    request, 
+                    request,
                     f'❌ Insufficient Stock!\n'
                     f'Requested: {request_blood_unit}ml of {request_blood_group}\n'
                     f'Available: {stock.unit}ml\n'
@@ -1092,11 +1276,52 @@ def update_approve_status_view(request, pk):
                 # Optionally auto-reject if no stock
                 if stock.unit == 0:
                     blood_request.status = "Rejected"
-                    blood_request.save()
+                    blood_request.save(update_fields=['status'])
                     messages.info(request, f'Request automatically rejected due to zero stock.')
-                    
-        except models.Stock.DoesNotExist:
-            messages.error(request, f'❌ Error: Blood group {request_blood_group} not found in stock database.')
+
+        # Fire-and-forget notifications outside the DB transaction.
+        if blood_request.status == "Approved":
+            try:
+                sms_tasks.send_request_approved_sms.delay(blood_request.pk)
+            except Exception as sms_error:  # pragma: no cover - non-blocking
+                logger.error(
+                    "Approval SMS enqueue failed for request %s: %s; falling back to synchronous send",
+                    blood_request.id,
+                    sms_error,
+                )
+                try:
+                    result = sms_service.notify_request_approved(blood_request)
+                    if isinstance(result, dict):
+                        _store_approval_sms_diagnostics(blood_request, result)
+                except Exception as fallback_error:  # pragma: no cover
+                    logger.error(
+                        "Approval SMS fallback failed for request %s: %s",
+                        blood_request.id,
+                        fallback_error,
+                    )
+        elif blood_request.status == "Rejected":
+            try:
+                sms_tasks.send_request_rejected_sms.delay(
+                    blood_request.pk,
+                    reason="Insufficient stock for this blood group.",
+                )
+            except Exception as sms_error:  # pragma: no cover - non-blocking
+                logger.error(
+                    "Auto-rejection SMS enqueue failed for request %s: %s; falling back to synchronous send",
+                    blood_request.id,
+                    sms_error,
+                )
+                try:
+                    sms_service.notify_request_rejected(
+                        blood_request,
+                        reason="Insufficient stock for this blood group.",
+                    )
+                except Exception as fallback_error:  # pragma: no cover
+                    logger.error(
+                        "Auto-rejection SMS fallback failed for request %s: %s",
+                        blood_request.id,
+                        fallback_error,
+                    )
             
     except models.BloodRequest.DoesNotExist:
         messages.error(request, '❌ Error: Blood request not found.')
@@ -1105,7 +1330,40 @@ def update_approve_status_view(request, pk):
     
     return redirect('admin-request')
 
+
 @login_required
+@require_POST
+def retry_approval_sms_view(request, pk):
+    """Admin-only: retry approval notifications and persist latest SMS diagnostics."""
+
+    if not request.user.is_superuser:
+        return redirect('adminlogin')
+
+    blood_request = get_object_or_404(
+        models.BloodRequest.objects.select_related('patient', 'request_by_donor'),
+        id=pk,
+    )
+
+    if blood_request.status != 'Approved':
+        messages.warning(request, 'SMS retry is available only for Approved requests.')
+        return redirect('admin-request-recommendations', pk=pk)
+
+    try:
+        result = sms_service.notify_request_approved(blood_request)
+        if isinstance(result, dict):
+            _store_approval_sms_diagnostics(blood_request, result)
+
+        patient_status = (result.get('patient') or {}).get('status') if isinstance(result, dict) else None
+        donor_status = (result.get('donor') or {}).get('status') if isinstance(result, dict) else None
+        messages.success(request, f"SMS retry attempted. Patient={patient_status or 'n/a'}, Donor={donor_status or 'n/a'}." )
+    except Exception as exc:  # pragma: no cover
+        logger.error('Approval SMS retry failed for request %s: %s', blood_request.id, exc)
+        messages.error(request, f'SMS retry failed: {exc}')
+
+    return redirect('admin-request-recommendations', pk=pk)
+
+@login_required
+@require_POST
 def update_reject_status_view(request, pk):
     if not request.user.is_superuser:
         return redirect('adminlogin')
@@ -1144,6 +1402,29 @@ def update_reject_status_view(request, pk):
             request_blood_group,
             request_blood_unit,
         )
+
+        try:
+            sms_tasks.send_request_rejected_sms.delay(
+                blood_request.pk,
+                reason="Request not approved after review.",
+            )
+        except Exception as sms_error:  # pragma: no cover - non-blocking
+            logger.error(
+                "Rejection SMS enqueue failed for request %s: %s; falling back to synchronous send",
+                blood_request.id,
+                sms_error,
+            )
+            try:
+                sms_service.notify_request_rejected(
+                    blood_request,
+                    reason="Request not approved after review.",
+                )
+            except Exception as fallback_error:  # pragma: no cover
+                logger.error(
+                    "Rejection SMS fallback failed for request %s: %s",
+                    blood_request.id,
+                    fallback_error,
+                )
               
     except models.BloodRequest.DoesNotExist:
         messages.error(request, '❌ Error: Blood request not found.')
@@ -1154,30 +1435,37 @@ def update_reject_status_view(request, pk):
 
 # Enhanced donation approval functions
 @login_required
+@require_POST
 def approve_donation_view(request, pk):
     if not request.user.is_superuser:
         return redirect('adminlogin')
     
     try:
-        donation = dmodels.BloodDonate.objects.select_related('donor__user').get(id=pk)
-        
-        # Check if already processed
-        if donation.status != 'Pending':
-            messages.warning(request, f'This donation has already been {donation.status.lower()}.')
-            return redirect('admin-donation')
-        
-        donation_blood_group = donation.bloodgroup
-        donation_blood_unit = donation.unit
-        donor_name = donation.donor.get_name
+        with transaction.atomic():
+            donation = dmodels.BloodDonate.objects.select_for_update().select_related('donor__user').get(id=pk)
 
-        try:
-            stock = models.Stock.objects.get(bloodgroup=donation_blood_group)
+            # Check if already processed
+            if donation.status != 'Pending':
+                messages.warning(request, f'This donation has already been {donation.status.lower()}.')
+                return redirect('admin-donation')
+
+            donation_blood_group = donation.bloodgroup
+            donation_blood_unit = donation.unit
+            donor_name = donation.donor.get_name
+
+            try:
+                stock = models.Stock.objects.select_for_update().get(bloodgroup=donation_blood_group)
+            except models.Stock.DoesNotExist:
+                messages.error(request, f'❌ Error: Blood group {donation_blood_group} not found in stock database.')
+                logger.error("Stock not found for blood group %s", donation_blood_group)
+                return redirect('admin-donation')
+
             old_stock = stock.unit
             stock.unit = stock.unit + donation_blood_unit
-            stock.save()
+            stock.save(update_fields=['unit'])
 
             donation.status = 'Approved'
-            donation.save()
+            donation.save(update_fields=['status'])
 
             # Keep donor eligibility state in sync
             try:
@@ -1186,9 +1474,9 @@ def approve_donation_view(request, pk):
             except Exception as exc:
                 # Do not block approval flow if donor profile update fails
                 logger.warning("Failed to update donor last_donated_at for donation %s: %s", pk, exc)
-            
+
             messages.success(
-                request, 
+                request,
                 f'✅ Donation Approved Successfully!\n'
                 f'Donor: {donor_name}\n'
                 f'Blood Group: {donation_blood_group}\n'
@@ -1196,7 +1484,7 @@ def approve_donation_view(request, pk):
                 f'Previous Stock: {old_stock}ml\n'
                 f'Updated Stock: {stock.unit}ml'
             )
-            
+
             # Detailed logging
             logger.info(
                 "BLOOD DONATION APPROVED - ID: %s, Donor: %s, Blood Group: %s, Units: %sml, Old Stock: %sml, New Stock: %sml",
@@ -1207,10 +1495,23 @@ def approve_donation_view(request, pk):
                 old_stock,
                 stock.unit,
             )
-                  
-        except models.Stock.DoesNotExist:
-            messages.error(request, f'❌ Error: Blood group {donation_blood_group} not found in stock database.')
-            logger.error("Stock not found for blood group %s", donation_blood_group)
+
+        try:
+            sms_tasks.send_donation_approved_sms.delay(donation.pk)
+        except Exception as sms_error:  # pragma: no cover - non-blocking
+            logger.error(
+                "Donation approval SMS enqueue failed for %s: %s; falling back to synchronous send",
+                donation.id,
+                sms_error,
+            )
+            try:
+                sms_service.notify_donation_approved(donation)
+            except Exception as fallback_error:  # pragma: no cover
+                logger.error(
+                    "Donation approval SMS fallback failed for %s: %s",
+                    donation.id,
+                    fallback_error,
+                )
             
     except dmodels.BloodDonate.DoesNotExist:
         messages.error(request, '❌ Error: Donation record not found.')
@@ -1222,6 +1523,7 @@ def approve_donation_view(request, pk):
     return redirect('admin-donation')
 
 @login_required
+@require_POST
 def reject_donation_view(request, pk):
     if not request.user.is_superuser:
         return redirect('adminlogin')
@@ -1258,6 +1560,29 @@ def reject_donation_view(request, pk):
             donation_blood_group,
             donation_blood_unit,
         )
+
+        try:
+            sms_tasks.send_donation_rejected_sms.delay(
+                donation.pk,
+                reason="Donation not approved after review.",
+            )
+        except Exception as sms_error:  # pragma: no cover - non-blocking
+            logger.error(
+                "Donation rejection SMS enqueue failed for %s: %s; falling back to synchronous send",
+                donation.id,
+                sms_error,
+            )
+            try:
+                sms_service.notify_donation_rejected(
+                    donation,
+                    reason="Donation not approved after review.",
+                )
+            except Exception as fallback_error:  # pragma: no cover
+                logger.error(
+                    "Donation rejection SMS fallback failed for %s: %s",
+                    donation.id,
+                    fallback_error,
+                )
               
     except dmodels.BloodDonate.DoesNotExist:
         messages.error(request, '❌ Error: Donation record not found.')
@@ -1836,8 +2161,15 @@ def admin_leadership_view(request):
     return render(request, 'blood/admin_leadership.html', context)
 
 
+@login_required
 def test_sms(request):
     """Manual endpoint to verify AWS SNS connectivity."""
+
+    if not request.user.is_superuser:
+        return redirect('adminlogin')
+
+    if not settings.DEBUG:
+        raise Http404
 
     phone = request.GET.get('phone', '+91XXXXXXXXXX')
     message = "Hello from BloodBridge! SMS working successfully."
@@ -1967,16 +2299,43 @@ def quick_request_view(request):
                 contact_number,
             )
 
+            alert_dispatched = False
             try:
-                sms_service.notify_matched_donors(blood_request, contact_number=contact_number)
+                sms_tasks.send_urgent_alerts.delay(blood_request.pk, contact_number=contact_number)
+                alert_dispatched = True
             except Exception as alert_error:  # pragma: no cover - logging fallback only
                 logger.error(
-                    "Failed to dispatch SNS alert for quick request %s: %s",
+                    "Failed to enqueue urgent alerts for quick request %s: %s; falling back to synchronous send",
                     blood_request.id,
                     alert_error,
                 )
-            else:
-                sms_service.send_requester_confirmation(blood_request, contact_number)
+                try:
+                    sms_service.notify_matched_donors(blood_request, contact_number=contact_number)
+                    alert_dispatched = True
+                except Exception as fallback_error:  # pragma: no cover
+                    logger.error(
+                        "Failed to dispatch SNS alert for quick request %s: %s",
+                        blood_request.id,
+                        fallback_error,
+                    )
+
+            if alert_dispatched:
+                try:
+                    sms_tasks.send_requester_confirmation_sms.delay(blood_request.pk, contact_number=contact_number)
+                except Exception as confirm_error:  # pragma: no cover
+                    logger.error(
+                        "Failed to enqueue requester confirmation for quick request %s: %s; falling back to synchronous send",
+                        blood_request.id,
+                        confirm_error,
+                    )
+                    try:
+                        sms_service.send_requester_confirmation(blood_request, contact_number)
+                    except Exception as fallback_error:  # pragma: no cover
+                        logger.error(
+                            "Failed to send requester confirmation for quick request %s: %s",
+                            blood_request.id,
+                            fallback_error,
+                        )
             
             # Redirect to success page with request ID
             return redirect('quick-request-success', request_id=blood_request.id)

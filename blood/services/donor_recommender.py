@@ -249,5 +249,6 @@ def recommend_donors_for_request(
             )
         )
 
-    recs.sort(key=lambda r: r.score, reverse=True)
+    # Always prefer available donors first, then highest score.
+    recs.sort(key=lambda r: (bool(getattr(r.donor, "is_available", False)), r.score), reverse=True)
     return recs[: max(1, int(limit))]

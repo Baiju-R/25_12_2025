@@ -3,8 +3,8 @@ from .models import Donor, BloodDonate
 
 @admin.register(Donor)
 class DonorAdmin(admin.ModelAdmin):
-    list_display = ['get_name', 'bloodgroup', 'mobile']
-    list_filter = ['bloodgroup']
+    list_display = ['get_name', 'bloodgroup', 'mobile', 'is_available', 'availability_updated_at']
+    list_filter = ['bloodgroup', 'is_available']
     search_fields = ['user__first_name', 'user__last_name', 'mobile']
 
 @admin.register(BloodDonate)

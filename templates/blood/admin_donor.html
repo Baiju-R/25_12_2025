@@ -163,6 +163,21 @@
         font-weight: 600;
         font-family: 'Courier New', monospace;
     }
+
+    .availability-pill {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: white;
+        letter-spacing: 0.3px;
+        min-width: 120px;
+        text-align: center;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+    }
+    .availability-pill.available { background: linear-gradient(45deg, #2ecc71, #27ae60); }
+    .availability-pill.unavailable { background: linear-gradient(45deg, #e74c3c, #c0392b); }
     
     .action-btn {
         padding: 8px 15px;
@@ -269,6 +284,7 @@
                             <th scope="col"><i class="fas fa-user"></i> Name</th>
                             <th scope="col"><i class="fas fa-image"></i> Profile</th>
                             <th scope="col"><i class="fas fa-tint"></i> Blood Group</th>
+                            <th scope="col"><i class="fas fa-toggle-on"></i> Availability</th>
                             <th scope="col"><i class="fas fa-map-marker-alt"></i> Address</th>
                             <th scope="col"><i class="fas fa-phone"></i> Mobile</th>
                             <th scope="col"><i class="fas fa-cogs"></i> Action</th>
@@ -294,20 +310,26 @@
                                 {% endif %}
                             </td>
                             <td><span class="blood-group-badge">{{t.bloodgroup}}</span></td>
+                            <td>
+                                {% if t.is_available %}
+                                    <span class="availability-pill available">Available</span>
+                                {% else %}
+                                    <span class="availability-pill unavailable">Not Available</span>
+                                {% endif %}
+                            </td>
                             <td class="donor-address">{{t.address}}</td>
                             <td class="donor-mobile">{{t.mobile}}</td>
                             <td>
                                 <div class="action-buttons">
-                                    <button class="btn action-btn btn-edit">
-                                        <a href="{% url 'update-donor' t.id %}">
-                                            <i class="fas fa-edit"></i> Edit
-                                        </a>
-                                    </button>
-                                    <button class="btn action-btn btn-delete">
-                                        <a href="{% url 'delete-donor' t.id %}">
+                                    <a class="btn action-btn btn-edit" href="{% url 'update-donor' t.id %}">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </a>
+                                    <form method="post" action="{% url 'delete-donor' t.id %}" style="display:inline;">
+                                        {% csrf_token %}
+                                        <button class="btn action-btn btn-delete" type="submit" onclick="return confirm('Delete this donor? This cannot be undone.');">
                                             <i class="fas fa-trash"></i> Delete
-                                        </a>
-                                    </button>
+                                        </button>
+                                    </form>
                                 </div>
                             </td>
                         </tr>

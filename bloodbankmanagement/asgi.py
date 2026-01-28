@@ -9,7 +9,15 @@ https://docs.djangoproject.com/en/3.0/howto/deployment/asgi/
 
 import os
 
+try:
+	from dotenv import load_dotenv  # type: ignore
+except Exception:
+	load_dotenv = None
+
 from django.core.asgi import get_asgi_application
+
+if load_dotenv:
+	load_dotenv(override=False)
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bloodbankmanagement.settings')
 

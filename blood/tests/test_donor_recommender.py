@@ -63,3 +63,38 @@ class DonorRecommenderTests(TestCase):
         )
         recs = recommend_donors_for_request(req, require_eligible=True)
         self.assertEqual(recs, [])
+
+    def test_recommender_orders_available_first_when_including_ineligible(self):
+        req = BloodRequest.objects.create(
+            patient=None,
+            request_by_donor=None,
+            patient_name="p",
+            patient_age=30,
+            reason="r",
+            bloodgroup="A+",
+            unit=200,
+            status="Pending",
+        )
+
+        u1 = User.objects.create(username="avail")
+        d1 = Donor.objects.create(
+            user=u1,
+            bloodgroup="A+",
+            address="x",
+            mobile="1",
+            is_available=True,
+            last_donated_at=None,
+        )
+
+        u2 = User.objects.create(username="unavail")
+        d2 = Donor.objects.create(
+            user=u2,
+            bloodgroup="A+",
+            address="x",
+            mobile="2",
+            is_available=False,
+            last_donated_at=None,
+        )
+
+        recs = recommend_donors_for_request(req, require_eligible=False, limit=10)
+        self.assertEqual([r.donor.id for r in recs[:2]], [d1.id, d2.id])

@@ -348,6 +348,12 @@
                     <span>Request History</span>
                 </a>
             </li>
+            <li>
+                <a href="{% url 'donor-feedback' %}" class="{% if request.path == '/donor/feedback/' %}active{% endif %}">
+                    <i class="fas fa-comment-dots"></i>
+                    <span>Feedback</span>
+                </a>
+            </li>
         </ul>
     </aside>
     <!-- Main Content -->

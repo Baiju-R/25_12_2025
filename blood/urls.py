@@ -3,6 +3,7 @@ from . import views
 
 urlpatterns = [
     path('', views.home_view, name='home'),
+    path('terms/', views.terms_and_conditions_view, name='terms-and-conditions'),
     path('adminlogin/', views.adminlogin_view, name='adminlogin'),
     path('logout/', views.logout_view, name='logout'),
     path('afterlogin/', views.afterlogin_view, name='afterlogin'),
@@ -27,6 +28,7 @@ urlpatterns = [
     path('delete-patient/<int:pk>/', views.delete_patient_view, name='delete-patient'),
     path('approve-request/<int:pk>/', views.update_approve_status_view, name='approve-request'),
     path('reject-request/<int:pk>/', views.update_reject_status_view, name='reject-request'),
+    path('approve-request/<int:pk>/retry-sms/', views.retry_approval_sms_view, name='retry-approval-sms'),
     path('approve-donation/<int:pk>/', views.approve_donation_view, name='approve-donation'),
     path('reject-donation/<int:pk>/', views.reject_donation_view, name='reject-donation'),
     

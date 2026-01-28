@@ -4,8 +4,21 @@ import os
 import sys
 
 
+def _load_dotenv() -> None:
+    """Load environment variables from a local .env file if present."""
+
+    try:
+        from dotenv import load_dotenv  # type: ignore
+    except Exception:
+        return
+
+    # Loads from the current working directory by default.
+    load_dotenv(override=False)
+
+
 def main():
     """Run administrative tasks."""
+    _load_dotenv()
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bloodbankmanagement.settings')
     try:
         from django.core.management import execute_from_command_line

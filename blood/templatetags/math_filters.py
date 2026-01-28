@@ -2,6 +2,11 @@ from django import template
 
 register = template.Library()
 
+
+@register.simple_tag
+def star_range():
+    return range(1, 6)
+
 @register.filter
 def percentage(value, total):
     """Calculates percentage."""

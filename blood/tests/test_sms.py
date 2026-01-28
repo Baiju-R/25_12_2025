@@ -8,6 +8,7 @@ from django.test import TestCase, override_settings
 from blood.models import BloodRequest
 from blood.services import sms
 from donor.models import Donor
+from patient.models import Patient
 
 
 class SNSAlertTests(TestCase):
@@ -43,6 +44,24 @@ class SNSAlertTests(TestCase):
 			request_zipcode="560001",
 		)
 
+	def _create_patient(self, mobile="+15551239999"):
+		self.user_counter += 1
+		user = User.objects.create_user(
+			username=f"patient{self.user_counter}",
+			password="DemoPass123!",
+			first_name="Test",
+			last_name=f"Patient{self.user_counter}",
+		)
+		return Patient.objects.create(
+			user=user,
+			age=30,
+			bloodgroup="A+",
+			disease="Test",
+			doctorname="Dr. Test",
+			address="Test Address",
+			mobile=mobile,
+		)
+
 	@override_settings(AWS_SNS_ENABLED=False)
 	def test_notify_skips_when_disabled(self):
 		blood_request = self._create_request()
@@ -73,3 +92,38 @@ class SNSAlertTests(TestCase):
 		donor_two.refresh_from_db()
 		self.assertIsNotNone(donor_one.last_notified_at)
 		self.assertIsNotNone(donor_two.last_notified_at)
+
+	@override_settings(AWS_SNS_ENABLED=True)
+	def test_notify_request_approved_sends_patient_and_donor(self):
+		donor = self._create_donor(mobile="+1 (555) 123-4567")
+		patient = self._create_patient(mobile="+1 (555) 999-0000")
+		blood_request = self._create_request()
+		blood_request.patient = patient
+		blood_request.save(update_fields=["patient"])
+
+		mock_sender = MagicMock(return_value={"status": "success"})
+
+		result = sms.notify_request_approved(blood_request, sms_sender=mock_sender)
+
+		self.assertEqual(mock_sender.call_count, 2)
+		self.assertEqual(result["status"], "sent")
+		self.assertEqual(result["patient"]["status"], "success")
+		self.assertEqual(result["donor"]["status"], "success")
+
+	@override_settings(AWS_SNS_ENABLED=True)
+	def test_notify_request_rejected_sends_patient(self):
+		patient = self._create_patient(mobile="+1 (555) 111-2222")
+		blood_request = self._create_request()
+		blood_request.patient = patient
+		blood_request.save(update_fields=["patient"])
+
+		mock_sender = MagicMock(return_value={"status": "success"})
+
+		result = sms.notify_request_rejected(
+			blood_request,
+			reason="Insufficient stock for this blood group.",
+			sms_sender=mock_sender,
+		)
+
+		self.assertEqual(mock_sender.call_count, 1)
+		self.assertEqual(result["status"], "success")

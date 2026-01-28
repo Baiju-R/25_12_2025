@@ -390,16 +390,18 @@
                             <td>
                                 {% if donation.status == 'Pending' %}
                                     <div class="action-buttons">
-                                        <button class="btn action-btn btn-approve">
-                                            <a href="{% url 'approve-donation' donation.id %}" onclick="return confirm('Are you sure you want to APPROVE this donation? This will add {{ donation.unit }}ml of {{ donation.bloodgroup }} blood to stock.')">
+                                        <form method="post" action="{% url 'approve-donation' donation.id %}" style="display:inline; margin:0;">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn action-btn btn-approve" onclick="return confirm('Are you sure you want to APPROVE this donation? This will add {{ donation.unit }}ml of {{ donation.bloodgroup }} blood to stock.')">
                                                 <i class="fas fa-check"></i> Approve
-                                            </a>
-                                        </button>
-                                        <button class="btn action-btn btn-reject">
-                                            <a href="{% url 'reject-donation' donation.id %}" onclick="return confirm('Are you sure you want to REJECT this donation? No blood will be added to stock.')">
+                                            </button>
+                                        </form>
+                                        <form method="post" action="{% url 'reject-donation' donation.id %}" style="display:inline; margin:0;">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn action-btn btn-reject" onclick="return confirm('Are you sure you want to REJECT this donation? No blood will be added to stock.')">
                                                 <i class="fas fa-times"></i> Reject
-                                            </a>
-                                        </button>
+                                            </button>
+                                        </form>
                                     </div>
                                 {% elif donation.status == 'Approved' %}
                                     <span class="status-label status-approved">

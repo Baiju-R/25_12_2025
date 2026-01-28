@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth.models import User
 from .models import Patient
+from blood.utils.phone import normalize_phone_number
 
 class PatientUserForm(forms.ModelForm):
     class Meta:
@@ -36,6 +37,13 @@ class PatientForm(forms.ModelForm):
             'profile_pic': forms.FileInput(attrs={'class': 'form-control-file'})
         }
 
+    def clean_mobile(self):
+        mobile = self.cleaned_data.get('mobile')
+        normalized = normalize_phone_number(mobile)
+        if not normalized:
+            raise forms.ValidationError('Enter a valid phone number (preferably with country code).')
+        return normalized
+
 class PatientRequestForm(forms.ModelForm):
     is_urgent = forms.BooleanField(required=False, label="Mark request as urgent (notifies nearby donors)")
 
@@ -52,8 +60,21 @@ class PatientRequestForm(forms.ModelForm):
             'is_urgent',
         ]
 
+    def clean_mobile(self):
+        mobile = self.cleaned_data.get('mobile')
+        normalized = normalize_phone_number(mobile)
+        if not normalized:
+            raise forms.ValidationError('Enter a valid phone number (preferably with country code).')
+        return normalized
+
 
 class PatientUserUpdateForm(forms.ModelForm):
     class Meta:
         model = User
-        fields = ['first_name', 'last_name', 'username']
+        fields = ['first_name', 'last_name', 'username', 'email']
+        widgets = {
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'username': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'})
+        }

@@ -51,6 +51,7 @@
 			<li><a href="{% url 'patient-dashboard' %}" class="{% if request.path == '/patient/dashboard/' %}active{% endif %}"><i class="fas fa-home"></i> Dashboard</a></li>
 			<li><a href="{% url 'make-request' %}" class="{% if request.path == '/patient/make-request/' %}active{% endif %}"><i class="fas fa-plus-circle"></i> Request Blood</a></li>
 			<li><a href="{% url 'my-request' %}" class="{% if request.path == '/patient/my-request/' %}active{% endif %}"><i class="fas fa-list-alt"></i> My Requests</a></li>
+			<li><a href="{% url 'patient-feedback' %}" class="{% if request.path == '/patient/feedback/' %}active{% endif %}"><i class="fas fa-comment-dots"></i> Feedback</a></li>
 		</ul>
 	</aside>
 	<!-- Main Content -->

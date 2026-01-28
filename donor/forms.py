@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth.models import User
 from .models import Donor, BloodDonate
+from blood.utils.phone import normalize_phone_number
 
 class DonorUserForm(forms.ModelForm):
     class Meta:
@@ -62,9 +63,18 @@ class DonorForm(forms.ModelForm):
         lng = cleaned_data.get('longitude')
 
         if (lat is None) != (lng is None):
-            raise forms.ValidationError('Please provide both latitude and longitude or leave both blank.')
+            raise forms.ValidationError(
+                'Please provide both latitude and longitude or leave both blank.'
+            )
 
         return cleaned_data
+
+    def clean_mobile(self):
+        mobile = self.cleaned_data.get('mobile')
+        normalized = normalize_phone_number(mobile)
+        if not normalized:
+            raise forms.ValidationError('Enter a valid phone number (preferably with country code).')
+        return normalized
 
 class BloodDonateForm(forms.ModelForm):
     class Meta:
@@ -75,4 +85,10 @@ class BloodDonateForm(forms.ModelForm):
 class DonorUserUpdateForm(forms.ModelForm):
     class Meta:
         model = User
-        fields = ['first_name', 'last_name', 'username']
+        fields = ['first_name', 'last_name', 'username', 'email']
+        widgets = {
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'username': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'})
+        }

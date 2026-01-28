@@ -304,16 +304,15 @@
                             <td class="mobile-display">{{t.mobile}}</td>
                             <td>
                                 <div class="action-buttons">
-                                    <button class="btn action-btn btn-edit">
-                                        <a href="{% url 'update-patient' t.id %}">
-                                            <i class="fas fa-edit"></i> Edit
-                                        </a>
-                                    </button>
-                                    <button class="btn action-btn btn-delete">
-                                        <a href="{% url 'delete-patient' t.id %}">
+                                    <a class="btn action-btn btn-edit" href="{% url 'update-patient' t.id %}">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </a>
+                                    <form method="post" action="{% url 'delete-patient' t.id %}" style="display:inline;">
+                                        {% csrf_token %}
+                                        <button class="btn action-btn btn-delete" type="submit" onclick="return confirm('Delete this patient? This cannot be undone.');">
                                             <i class="fas fa-trash"></i> Delete
-                                        </a>
-                                    </button>
+                                        </button>
+                                    </form>
                                 </div>
                             </td>
                         </tr>

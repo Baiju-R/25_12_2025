@@ -449,16 +449,18 @@
                                     <a class="action-btn btn-recommend" href="{% url 'admin-request-recommendations' blood_request.id %}">
                                         <i class="fas fa-brain"></i> Review & Recommend
                                     </a>
-                                    <button class="btn action-btn btn-approve">
-                                        <a href="{% url 'approve-request' blood_request.id %}" onclick="return confirm('Are you sure you want to APPROVE this blood request? This will deduct blood from stock.')">
+                                    <form method="post" action="{% url 'approve-request' blood_request.id %}" style="display:inline; margin:0;">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn action-btn btn-approve" onclick="return confirm('Are you sure you want to APPROVE this blood request? This will deduct blood from stock.')">
                                             <i class="fas fa-check"></i> Approve
-                                        </a>
-                                    </button>
-                                    <button class="btn action-btn btn-reject">
-                                        <a href="{% url 'reject-request' blood_request.id %}" onclick="return confirm('Are you sure you want to REJECT this blood request? No blood will be deducted from stock.')">
+                                        </button>
+                                    </form>
+                                    <form method="post" action="{% url 'reject-request' blood_request.id %}" style="display:inline; margin:0;">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn action-btn btn-reject" onclick="return confirm('Are you sure you want to REJECT this blood request? No blood will be deducted from stock.')">
                                             <i class="fas fa-times"></i> Reject
-                                        </a>
-                                    </button>
+                                        </button>
+                                    </form>
                                 </div>
                             </td>
                         </tr>

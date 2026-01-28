@@ -129,6 +129,21 @@
         margin-bottom: 18px;
     }
 
+    .diag {
+        background: #f8f9fa;
+        border-radius: 16px;
+        padding: 14px 16px;
+        border-left: 4px solid #3498db;
+        margin-bottom: 18px;
+    }
+
+    .diag h5 { margin: 0 0 8px 0; font-weight: 900; color: #2c3e50; }
+    .diag .row { display: flex; flex-wrap: wrap; gap: 12px; }
+    .diag .box { flex: 1; min-width: 240px; background: white; border-radius: 12px; padding: 10px 12px; border: 1px solid #ecf0f1; }
+    .diag .k { color: #7f8c8d; font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; }
+    .diag .v { color: #2c3e50; font-weight: 800; margin-top: 4px; word-break: break-word; }
+    .btn-retry { background: linear-gradient(45deg, #8e44ad, #9b59b6); }
+
     .rules h5 { margin: 0 0 8px 0; font-weight: 900; color: #2c3e50; }
     .rules ul { margin: 0; padding-left: 18px; color: #5a6c7d; font-weight: 600; }
 </style>
@@ -168,8 +183,14 @@
 
             <div class="actions">
                 <a class="btn-action btn-back" href="{% url 'admin-request' %}">Back to Requests</a>
-                <a class="btn-action btn-approve" href="{% url 'approve-request' blood_request.id %}">Approve Request</a>
-                <a class="btn-action btn-reject" href="{% url 'reject-request' blood_request.id %}">Reject Request</a>
+                <form method="post" action="{% url 'approve-request' blood_request.id %}" style="display:inline; margin:0;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-action btn-approve" onclick="return confirm('Approve this request? This will deduct units from stock.')">Approve Request</button>
+                </form>
+                <form method="post" action="{% url 'reject-request' blood_request.id %}" style="display:inline; margin:0;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-action btn-reject" onclick="return confirm('Reject this request? No stock will be deducted.')">Reject Request</button>
+                </form>
             </div>
 
             <div class="rules">
@@ -179,6 +200,48 @@
                     <li>Recovery window: {{ recovery_days }} days since last approved donation</li>
                     <li>If provided: age must be 18–65, weight must meet minimum, hemoglobin must meet threshold</li>
                 </ul>
+            </div>
+
+            <div class="diag">
+                <h5>SMS delivery diagnostics</h5>
+                <div class="row">
+                    <div class="box">
+                        <div class="k">Requester (normalized)</div>
+                        <div class="v">{% if requester_contact_normalized %}{{ requester_contact_normalized }}{% else %}—{% endif %}</div>
+                    </div>
+                    <div class="box">
+                        <div class="k">Top recommended donor (normalized)</div>
+                        <div class="v">{% if top_recommended_donor_normalized %}{{ top_recommended_donor_normalized }}{% else %}—{% endif %}</div>
+                    </div>
+                    <div class="box">
+                        <div class="k">Last approval SMS attempt</div>
+                        <div class="v">{% if blood_request.sms_last_approval_attempt_at %}{{ blood_request.sms_last_approval_attempt_at }}{% else %}—{% endif %}</div>
+                    </div>
+                    <div class="box">
+                        <div class="k">Last result (patient / donor)</div>
+                        <div class="v">
+                            {% if blood_request.sms_last_approval_result %}
+                                Patient: {{ blood_request.sms_last_approval_result.patient.status }}
+                                {% if blood_request.sms_last_approval_patient_to %}({{ blood_request.sms_last_approval_patient_to }}){% endif %}
+                                <br/>
+                                Donor: {% if blood_request.sms_last_approval_result.donor %}{{ blood_request.sms_last_approval_result.donor.status }}{% else %}—{% endif %}
+                                {% if blood_request.sms_last_approval_donor_to %}({{ blood_request.sms_last_approval_donor_to }}){% endif %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if blood_request.status == 'Approved' %}
+                    <div style="margin-top: 12px;">
+                        <form method="post" action="{% url 'retry-approval-sms' blood_request.id %}" style="display:inline; margin:0;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn-action btn-retry" onclick="return confirm('Retry approval SMS now?')">Retry Approval SMS</button>
+                        </form>
+                        <span style="margin-left:10px; color:#5a6c7d; font-weight:700;">SNS publish success may still fail delivery due to carrier/handset blocks.</span>
+                    </div>
+                {% endif %}
             </div>
 
             {% if recommendations %}

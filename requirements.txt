@@ -9,9 +9,12 @@ folium==0.20.0
 global-land-mask==1.0.0
 pyngrok==7.1.2
 boto3==1.34.148
+celery==5.3.6
+redis==5.0.4
 gunicorn==21.2.0
 whitenoise==6.6.0
 dj-database-url==2.1.0
 psycopg2-binary==2.9.9
 Pillow==10.2.0
+python-dotenv==1.2.1
 

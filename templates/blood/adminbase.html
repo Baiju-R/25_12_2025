@@ -271,6 +271,7 @@
     </style>
 </head>
 <body>
+    {% load system_status %}
     <nav class="navbar navbar-expand-lg navbar-light fixed-top bg-danger">
         <button class="mobile-menu-toggle" onclick="toggleSidebar()">
             <i class="fas fa-bars"></i>
@@ -308,12 +309,46 @@
                 <li><a href="/admin-donation"><i class="fas fa-hand-holding-water"></i> Donations</a></li>
                 <li><a href="/admin-leadership/"><i class="fas fa-trophy"></i> Leadership</a></li>
                 <li><a href="/admin-analytics"><i class="fas fa-chart-line"></i> Analytics</a></li>
+                <li><a href="{% url 'admin-feedback-list' %}"><i class="fas fa-comment-dots"></i> Feedback</a></li>
             </ul>
         </div>
         
         <div class="main_content">
             <div class="header">
                 <div class="container-fluid">
+                    {% celery_status as celery %}
+                    {% if celery.show_sms_banner %}
+                        {% if celery.task_always_eager %}
+                            <div class="alert alert-info mt-2 mb-0">
+                                <strong>SMS mode:</strong> Celery eager mode is ON. Notifications run inside the web request.
+                            </div>
+                        {% elif celery.broker_ok is False %}
+                            <div class="alert alert-warning mt-2 mb-0">
+                                <strong>SMS mode:</strong> Queue broker is unreachable. The system will fall back to synchronous SMS sending.
+                                {% if celery.broker_error %}<div class="small mt-1">{{ celery.broker_error }}</div>{% endif %}
+                            </div>
+                        {% elif celery.broker_ok %}
+                            <div class="alert alert-success mt-2 mb-0">
+                                <strong>SMS mode:</strong> Background queue is active. Notifications are being enqueued.
+                            </div>
+                        {% endif %}
+                    {% endif %}
+
+                    {% if messages %}
+                        <div class="mt-2">
+                            {% for message in messages %}
+                                {% if message.tags == 'error' %}
+                                    <div class="alert alert-danger" role="alert">{{ message }}</div>
+                                {% elif message.tags == 'warning' %}
+                                    <div class="alert alert-warning" role="alert">{{ message }}</div>
+                                {% elif message.tags == 'success' %}
+                                    <div class="alert alert-success" role="alert">{{ message }}</div>
+                                {% else %}
+                                    <div class="alert alert-info" role="alert">{{ message }}</div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
                     {% block content %}
                     {% endblock content %}
                 </div>

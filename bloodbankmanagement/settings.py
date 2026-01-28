@@ -211,10 +211,26 @@ GEOCODER_STATIC_FIXTURES = {
 AWS_SNS_ENABLED = os.getenv('AWS_SNS_ENABLED', 'false').lower() == 'true'
 AWS_SNS_REGION = os.getenv('AWS_SNS_REGION', 'ap-south-1')
 AWS_SNS_DEFAULT_COUNTRY_CODE = os.getenv('AWS_SNS_DEFAULT_COUNTRY_CODE', '+91')
-AWS_SNS_SENDER_ID = os.getenv('AWS_SNS_SENDER_ID', 'BLDBRDG')
+AWS_SNS_SENDER_ID = os.getenv('AWS_SNS_SENDER_ID', None)
 AWS_SNS_MAX_RECIPIENTS = int(os.getenv('AWS_SNS_MAX_RECIPIENTS', '25'))
 AWS_SNS_MIN_NOTIFICATION_GAP_SECONDS = int(os.getenv('AWS_SNS_MIN_NOTIFICATION_GAP_SECONDS', '1800'))
 AWS_SNS_SMS_TYPE = os.getenv('AWS_SNS_SMS_TYPE', 'Transactional')
+
+# Celery (background jobs)
+# Recommended broker: Redis. On Windows, run workers with --pool=solo.
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', CELERY_BROKER_URL)
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+
+# Development/testing helper: run tasks inline without a worker.
+CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'false').lower() == 'true'
+
+# Admin UI: show/hide the SMS mode banner (broker health / eager mode).
+# Default: hidden to avoid noisy warnings in local setups without Redis.
+ADMIN_SHOW_SMS_MODE_BANNER = os.getenv('ADMIN_SHOW_SMS_MODE_BANNER', 'false').lower() == 'true'
 
 if not DEBUG:
     CSRF_TRUSTED_ORIGINS = ['https://' + host for host in ALLOWED_HOSTS if host not in ('127.0.0.1', 'localhost')]

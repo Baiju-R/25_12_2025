@@ -44,6 +44,13 @@ urlpatterns = [
     path('admin-leadership/', blood_views.admin_leadership_view, name='admin-leadership'),
     path('assistant/', blood_views.knowledge_chatbot_view, name='knowledge-chatbot'),
 
+    # Feedback URLs
+    path('feedback/', blood_views.public_feedback_create_view, name='public-feedback'),
+    path('feedback/all/', blood_views.public_feedback_list_view, name='public-feedback-list'),
+    path('terms/', blood_views.terms_and_conditions_view, name='terms-and-conditions'),
+    path('admin-feedback/', blood_views.admin_feedback_list_view, name='admin-feedback-list'),
+    path('admin-feedback/<int:pk>/', blood_views.admin_feedback_edit_view, name='admin-feedback-edit'),
+
     # Admin action URLs
     path('update-donor/<int:pk>/', blood_views.update_donor_view, name='update-donor'),
     path('delete-donor/<int:pk>/', blood_views.delete_donor_view, name='delete-donor'),

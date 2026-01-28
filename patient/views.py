@@ -1,6 +1,6 @@
 import logging
 
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group, User
@@ -8,6 +8,8 @@ from django.contrib import messages
 from django.db.models import Sum
 
 from blood.models import BloodRequest
+from blood.forms import FeedbackForm
+from blood.models import Feedback
 from blood.services import sms as sms_service
 from .forms import PatientUserForm, PatientForm
 from .models import Patient
@@ -27,7 +29,7 @@ def patientsignup_view(request):
         patientForm = PatientForm(request.POST, request.FILES)
         
         # Debug form data
-        logger.debug("Patient signup POST data: %s", request.POST)
+        logger.debug("Patient signup POST keys: %s", list(request.POST.keys()))
         logger.debug("Patient signup user form valid: %s", userForm.is_valid())
         logger.debug("Patient signup patient form valid: %s", patientForm.is_valid())
         
@@ -135,6 +137,7 @@ def patient_dashboard_view(request):
         
         # Get recent requests
         recent_requests = requests.order_by('-date')[:5]
+        recent_feedbacks = Feedback.objects.filter(patient=patient).order_by('-created_at')[:5]
         
         context = {
             'patient': patient,
@@ -145,6 +148,7 @@ def patient_dashboard_view(request):
             'total_units_requested': total_units_requested,
             'total_approved_units': total_approved_units,
             'recent_requests': recent_requests,
+            'recent_feedbacks': recent_feedbacks,
         }
     except Patient.DoesNotExist:
         messages.error(request, 'Patient profile not found. Please contact support.')
@@ -160,6 +164,32 @@ def patient_dashboard_view(request):
         }
     
     return render(request, 'patient/patient_dashboard.html', context)
+
+
+@login_required
+def patient_feedback_create_view(request):
+    if not request.user.groups.filter(name='PATIENT').exists():
+        messages.error(request, 'Access denied. Patient account required.')
+        return redirect('patientlogin')
+
+    patient = get_object_or_404(Patient, user=request.user)
+
+    form = FeedbackForm()
+    if request.method == 'POST':
+        form = FeedbackForm(request.POST, request.FILES)
+        if form.is_valid():
+            feedback = form.save(commit=False)
+            feedback.author_type = Feedback.AUTHOR_PATIENT
+            feedback.patient = patient
+            feedback.donor = None
+            feedback.display_name = ''
+            feedback.is_public = True
+            feedback.save()
+            messages.success(request, 'Thanks! Your feedback has been submitted.')
+            return redirect('patient-dashboard')
+        messages.error(request, 'Please fix the errors in the feedback form.')
+
+    return render(request, 'patient/feedback_form.html', {'form': form})
 
 @login_required
 def patient_request_view(request):
@@ -275,14 +305,42 @@ def patient_request_view(request):
 
             if is_urgent:
                 try:
-                    sms_service.notify_matched_donors(blood_request, contact_number=patient.mobile)
+                    from blood import tasks as sms_tasks
+
+                    sms_tasks.send_urgent_alerts.delay(blood_request.pk, contact_number=patient.mobile)
                 except Exception as alert_error:  # pragma: no cover
                     logger.error(
-                        "Failed to dispatch SNS alert for patient request %s: %s",
+                        "Failed to enqueue urgent alerts for patient request %s: %s; falling back to synchronous send",
                         blood_request.id,
                         alert_error,
                     )
-                sms_service.send_requester_confirmation(blood_request, patient.mobile)
+                    try:
+                        sms_service.notify_matched_donors(blood_request, contact_number=patient.mobile)
+                    except Exception as fallback_error:  # pragma: no cover
+                        logger.error(
+                            "Failed to dispatch SNS alert for patient request %s: %s",
+                            blood_request.id,
+                            fallback_error,
+                        )
+
+                try:
+                    from blood import tasks as sms_tasks
+
+                    sms_tasks.send_requester_confirmation_sms.delay(blood_request.pk, contact_number=patient.mobile)
+                except Exception as confirm_error:  # pragma: no cover
+                    logger.error(
+                        "Failed to enqueue requester confirmation for patient request %s: %s; falling back to synchronous send",
+                        blood_request.id,
+                        confirm_error,
+                    )
+                    try:
+                        sms_service.send_requester_confirmation(blood_request, patient.mobile)
+                    except Exception as fallback_error:  # pragma: no cover
+                        logger.error(
+                            "Failed to send requester confirmation for patient request %s: %s",
+                            blood_request.id,
+                            fallback_error,
+                        )
             return redirect('my-request')
             
         except Exception as e:

@@ -174,6 +174,7 @@
         text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
     }
 
+
     /* Mini charts (no external JS required) */
     .qa-card-body {
         padding: 22px;
@@ -503,6 +504,64 @@
                         </div>
                         <div class="mini-subtle" style="margin-top: 10px;">
                             Mix is based on all requests in the system.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row qa-row-spacer">
+            <div class="col-lg-12">
+                <div class="card blood-card stats-card">
+                    <div class="qa-card-body">
+                        <div class="qa-head">
+                            <div>
+                                <div class="mini-card-title" style="margin-bottom: 4px;">Community Feedback</div>
+                                <div class="mini-subtle">Reply and react with emojis; public items appear on homepage.</div>
+                            </div>
+                            <a href="{% url 'admin-feedback-list' %}" class="qa-link">Manage</a>
+                        </div>
+
+                        <div class="qa-kpi-grid">
+                            <div class="qa-kpi">
+                                <div class="stats-number approved" style="font-size: 2.1rem; margin-bottom: 6px;">{{feedback_total}}</div>
+                                <div class="stats-label">Total</div>
+                            </div>
+                            <div class="qa-kpi">
+                                <div class="stats-number donors" style="font-size: 2.1rem; margin-bottom: 6px;">{{feedback_public}}</div>
+                                <div class="stats-label">Public</div>
+                            </div>
+                        </div>
+
+                        <div class="qa-kpi-grid" style="margin-top: 14px;">
+                            <div class="qa-kpi" style="grid-column: span 2;">
+                                <div class="mini-subtle" style="margin-bottom: 8px; font-weight: 700;">Latest feedback</div>
+                                {% if latest_feedbacks %}
+                                    {% for fb in latest_feedbacks %}
+                                        <div style="padding: 10px 0; border-top: 1px solid rgba(226,232,240,0.85);">
+                                            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                                                <div style="font-weight: 800; color:#0f172a;">{{ fb.author_label }} • {{ fb.created_at|date:"d M" }}</div>
+                                                <div style="font-weight:800;color:#64748b;">
+                                                    {% star_range as stars %}
+                                                    <span style="color:#f1c40f; letter-spacing:1px;">
+                                                        {% for i in stars %}{% if fb.rating >= i %}★{% else %}☆{% endif %}{% endfor %}
+                                                    </span>
+                                                    {% if fb.admin_reaction %}<span style="margin-left:8px;">{{ fb.admin_reaction }}</span>{% endif %}
+                                                </div>
+                                            </div>
+                                            <div class="mini-subtle" style="margin-top: 6px;">
+                                                {{ fb.message|truncatechars:140 }}
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="mini-subtle">No feedback yet.</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="qa-actions">
+                            <a href="{% url 'admin-feedback-list' %}" class="qa-btn">Open feedback inbox</a>
                         </div>
                     </div>
                 </div>
