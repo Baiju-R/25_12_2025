@@ -62,5 +62,7 @@ If you want background SMS jobs:
 - Deploy a separate worker service using the same image but with a different command.
 
 For a simple deployment without Redis/workers, you can set:
-- `CELERY_TASK_ALWAYS_EAGER=true`
+- `CELERY_TASK_ALWAYS_EAGER=true` (runs `.delay()` tasks inline in the web request)
+
+Note: On Cloud Run, this repo defaults to eager mode automatically unless you explicitly set `CELERY_TASK_ALWAYS_EAGER=false`.
 

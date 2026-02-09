@@ -230,7 +230,12 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
 # Development/testing helper: run tasks inline without a worker.
-CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'false').lower() == 'true'
+# Cloud Run demo default: if CELERY_TASK_ALWAYS_EAGER isn't explicitly set, run inline.
+celery_task_always_eager_env = os.getenv('CELERY_TASK_ALWAYS_EAGER')
+if celery_task_always_eager_env is None and os.getenv('K_SERVICE'):
+    CELERY_TASK_ALWAYS_EAGER = True
+else:
+    CELERY_TASK_ALWAYS_EAGER = (celery_task_always_eager_env or 'false').lower() == 'true'
 
 # Admin UI: show/hide the SMS mode banner (broker health / eager mode).
 # Default: hidden to avoid noisy warnings in local setups without Redis.
