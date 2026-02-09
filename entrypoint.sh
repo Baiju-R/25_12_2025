@@ -15,6 +15,12 @@ if [ "${MIGRATE_ON_STARTUP:-true}" = "true" ]; then
   python manage.py migrate --noinput
 fi
 
+# Optional: ensure an admin login exists (non-interactive).
+# Controlled via env vars: PROVISION_ADMIN_ON_STARTUP, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL.
+if [ "${PROVISION_ADMIN_ON_STARTUP:-false}" = "true" ]; then
+  python manage.py provision_admin
+fi
+
 # Optional: warm-up staticfiles manifest checks (no-op if already collected)
 # python manage.py collectstatic --noinput
 

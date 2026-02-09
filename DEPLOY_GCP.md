@@ -42,13 +42,49 @@ By default this project uses SQLite. On Cloud Run this is **not suitable for pro
 
 It can be OK for a demo.
 
-### Recommended: Cloud SQL Postgres
+### Recommended: Cloud SQL Postgres (persistent data + logins)
 This project already includes `dj-database-url` + `psycopg2-binary`.
+
+If you want your **current data and login credentials** to stay available (and survive restarts), move to Cloud SQL.
+
+High-level flow:
+1) Create a Cloud SQL Postgres instance + DB + user
+2) Attach the Cloud SQL instance to Cloud Run
+3) Set `DATABASE_URL` to Postgres
+4) Run migrations once
+5) (Optional) import your existing SQLite data into Postgres
+
+Example `DATABASE_URL` for Cloud Run + Cloud SQL via Unix socket:
+
+- `DATABASE_URL=postgres://DB_USER:DB_PASSWORD@/DB_NAME?host=/cloudsql/INSTANCE_CONNECTION_NAME`
+
+Where `INSTANCE_CONNECTION_NAME` looks like:
+
+- `bloodbridge-prod:asia-south1:YOUR_INSTANCE`
 
 Typical approach:
 - Create a Cloud SQL Postgres instance
 - Set `DATABASE_URL` to a Postgres URL
 - Configure Cloud Run to connect to Cloud SQL (Cloud SQL connector)
+
+### Importing existing SQLite data (optional)
+If your current `db.sqlite3` contains demo/real records you want to preserve:
+
+1) Export from SQLite locally:
+- `py manage.py dumpdata --natural-foreign --natural-primary --exclude contenttypes --exclude auth.Permission > data.json`
+
+2) After Cloud Run is pointed at Postgres and migrations have run, load into Postgres:
+- `py manage.py loaddata data.json`
+
+Note: if you have a lot of data, we can do this via a one-off Cloud Run Job instead of locally.
+
+### Non-interactive admin login (recommended)
+On Cloud Run you can’t use interactive `createsuperuser`. This repo includes a command to provision an admin account from env vars:
+
+- Set `PROVISION_ADMIN_ON_STARTUP=true`
+- Set `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_EMAIL`
+
+Then the container will run `python manage.py provision_admin` at startup (after migrations) to ensure the admin login exists.
 
 If you tell me your preferred region and DB name/user, I can add an exact step-by-step Cloud SQL + Cloud Run config section.
 
