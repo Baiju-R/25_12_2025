@@ -27,7 +27,11 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-xp^wz=i&8%o*%@2)7#k-7w7fhx
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost,testserver').split(',')
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost,testserver').split(',')
+    if host.strip()
+]
 
 
 # Application definition
@@ -233,7 +237,29 @@ CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'false').lower(
 ADMIN_SHOW_SMS_MODE_BANNER = os.getenv('ADMIN_SHOW_SMS_MODE_BANNER', 'false').lower() == 'true'
 
 if not DEBUG:
-    CSRF_TRUSTED_ORIGINS = ['https://' + host for host in ALLOWED_HOSTS if host not in ('127.0.0.1', 'localhost')]
+    # When running behind a proxy (Cloud Run, load balancers), respect forwarded HTTPS scheme.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+    csrf_trusted_origins_env = os.getenv('CSRF_TRUSTED_ORIGINS', '').strip()
+    if csrf_trusted_origins_env:
+        CSRF_TRUSTED_ORIGINS = [
+            origin.strip()
+            for origin in csrf_trusted_origins_env.split(',')
+            if origin.strip()
+        ]
+    else:
+        # Derive safe defaults from ALLOWED_HOSTS.
+        # If a host begins with a dot (e.g. `.a.run.app`), turn it into a wildcard origin.
+        derived = []
+        for host in ALLOWED_HOSTS:
+            if host in ('127.0.0.1', 'localhost', 'testserver', '*'):
+                continue
+            if host.startswith('.'):
+                derived.append('https://*' + host)
+            else:
+                derived.append('https://' + host)
+        CSRF_TRUSTED_ORIGINS = derived
+
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
