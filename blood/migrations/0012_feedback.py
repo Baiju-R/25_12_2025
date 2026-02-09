@@ -35,7 +35,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ['-created_at'],
-                'constraints': [models.CheckConstraint(condition=models.Q(('donor__isnull', False), ('patient__isnull', False), _negated=True), name='feedback_not_both_donor_and_patient'), models.CheckConstraint(condition=models.Q(models.Q(('author_type', 'ANONYMOUS'), ('donor__isnull', True), ('patient__isnull', True)), models.Q(('author_type', 'DONOR'), ('donor__isnull', False), ('patient__isnull', True)), models.Q(('author_type', 'PATIENT'), ('donor__isnull', True), ('patient__isnull', False)), _connector='OR'), name='feedback_author_matches_fk'), models.CheckConstraint(condition=models.Q(('rating__gte', 1), ('rating__lte', 5)), name='feedback_rating_1_to_5')],
+                'constraints': [models.CheckConstraint(check=models.Q(('donor__isnull', False), ('patient__isnull', False), _negated=True), name='feedback_not_both_donor_and_patient'), models.CheckConstraint(check=models.Q(models.Q(('author_type', 'ANONYMOUS'), ('donor__isnull', True), ('patient__isnull', True)), models.Q(('author_type', 'DONOR'), ('donor__isnull', False), ('patient__isnull', True)), models.Q(('author_type', 'PATIENT'), ('donor__isnull', True), ('patient__isnull', False)), _connector='OR'), name='feedback_author_matches_fk'), models.CheckConstraint(check=models.Q(('rating__gte', 1), ('rating__lte', 5)), name='feedback_rating_1_to_5')],
             },
         ),
     ]
