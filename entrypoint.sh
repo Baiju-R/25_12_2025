@@ -15,6 +15,12 @@ if [ "${MIGRATE_ON_STARTUP:-true}" = "true" ]; then
   python manage.py migrate --noinput
 fi
 
+# Optional: one-time import of the bundled demo SQLite data into the default DB.
+# Safe by default: the command skips if the default DB already has users.
+if [ "${IMPORT_DEMO_SQLITE_ON_STARTUP:-false}" = "true" ]; then
+  python manage.py import_demo_sqlite
+fi
+
 # Optional: ensure an admin login exists (non-interactive).
 # Controlled via env vars: PROVISION_ADMIN_ON_STARTUP, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL.
 if [ "${PROVISION_ADMIN_ON_STARTUP:-false}" = "true" ]; then

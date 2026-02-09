@@ -96,6 +96,11 @@ DATABASES = {
     )
 }
 
+# Optional secondary database used for one-time imports (e.g., bundled demo SQLite -> Postgres).
+legacy_database_url = os.getenv('LEGACY_DATABASE_URL', '').strip()
+if legacy_database_url:
+    DATABASES['legacy'] = dj_database_url.parse(legacy_database_url, conn_max_age=0)
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
