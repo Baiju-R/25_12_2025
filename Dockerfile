@@ -21,6 +21,8 @@ COPY . /app/
 # Collect static at build time (WhiteNoise). No DB required.
 RUN python manage.py collectstatic --noinput
 
+RUN chmod +x /app/entrypoint.sh
+
 EXPOSE 8080
 
-CMD ["sh", "-c", "gunicorn bloodbankmanagement.wsgi:application --bind 0.0.0.0:${PORT:-8080} --log-file -"]
+CMD ["/app/entrypoint.sh"]
