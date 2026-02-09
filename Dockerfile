@@ -18,10 +18,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app/
 
+# Ensure entrypoint is executable
+RUN chmod +x /app/entrypoint.sh
+
 # Collect static at build time (WhiteNoise). No DB required.
 RUN python manage.py collectstatic --noinput
-
-RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8080
 
