@@ -9,10 +9,20 @@ from typing import Dict, Optional, Sequence, Tuple
 
 from django.conf import settings
 
-try:  # pragma: no cover - import guard
-	from global_land_mask import globe as _land_globe
-except ImportError:  # pragma: no cover - handled gracefully at runtime
-	_land_globe = None
+# NOTE:
+# `global_land_mask` is a heavy dependency (large data tables). Importing it at
+# module import time can cause slow cold-starts or OOM in small containers.
+# We import it lazily only when a land/ocean check is actually needed.
+_land_globe = None
+
+
+@lru_cache(maxsize=1)
+def _get_land_globe():
+	try:  # pragma: no cover - optional dependency
+		from global_land_mask import globe
+		return globe
+	except ImportError:
+		return None
 
 try:  # pragma: no cover - import guard
 	from geopy.geocoders import Nominatim
@@ -95,10 +105,11 @@ def _geocode_callable():
 def _is_land_coordinate(latitude: Decimal, longitude: Decimal) -> bool:
 	"""Best-effort guard ensuring generated pins land on solid ground."""
 
-	if _land_globe is None:
+	land_globe = _land_globe or _get_land_globe()
+	if land_globe is None:
 		return True
 	try:
-		return bool(_land_globe.is_land(float(latitude), float(longitude)))
+		return bool(land_globe.is_land(float(latitude), float(longitude)))
 	except Exception:  # pragma: no cover - depends on native lookup
 		return False
 
