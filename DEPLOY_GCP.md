@@ -42,6 +42,9 @@ By default this project uses SQLite. On Cloud Run this is **not suitable for pro
 
 It can be OK for a demo.
 
+If you want **persistent SQLite with all current data + logins**, deploy to a VM instead:
+- See [DEPLOY_VM_SQLITE.md](DEPLOY_VM_SQLITE.md)
+
 ### Recommended: Cloud SQL Postgres (persistent data + logins)
 This project already includes `dj-database-url` + `psycopg2-binary`.
 

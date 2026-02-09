@@ -9,6 +9,7 @@ staticfiles/
 .env
 .env.*
 !.env.example
+!.env.vm.example
 venv/
 .vscode/
 .DS_Store
