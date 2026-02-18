@@ -15,11 +15,18 @@ urlpatterns = [
     path('admin-donor-map/', views.admin_donor_map_view, name='admin-donor-map'),
     path('admin-patient/', views.admin_patient_view, name='admin-patient'),
     path('admin-request/', views.admin_request_view, name='admin-request'),
+    path('admin-request/<int:pk>/broadcast/', views.emergency_broadcast_view, name='emergency-broadcast'),
     path('admin-request/<int:pk>/recommendations/', views.admin_request_recommendations_view, name='admin-request-recommendations'),
     path('admin-request-history/', views.admin_request_history_view, name='admin-request-history'),
     path('admin-donation/', views.admin_donation_view, name='admin-donation'),
     path('admin-analytics/', views.admin_analytics_view, name='admin-analytics'),
     path('admin-leadership/', views.admin_leadership_view, name='admin-leadership'),
+    path('admin-appointments/', views.admin_appointments_view, name='admin-appointments'),
+    path('admin-appointments/<int:pk>/status/', views.admin_appointment_update_status_view, name='admin-appointment-update-status'),
+    path('admin-verification/', views.admin_verification_view, name='admin-verification'),
+    path('admin-audit-logs/', views.admin_audit_logs_view, name='admin-audit-logs'),
+    path('admin-reports/', views.admin_reports_view, name='admin-reports'),
+    path('admin-reports/export/<str:report_key>/<str:fmt>/', views.admin_reports_export_view, name='admin-reports-export'),
     
     # Admin Actions
     path('update-donor/<int:pk>/', views.update_donor_view, name='update-donor'),
@@ -35,4 +42,5 @@ urlpatterns = [
     # Utility URLs
     path('request-blood/', views.request_blood_redirect_view, name='request-blood-redirect'),
     path('test-sms/', views.test_sms, name='test-sms'),
+    path('service-worker.js', views.service_worker_js_view, name='service-worker-js'),
 ]

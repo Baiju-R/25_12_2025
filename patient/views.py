@@ -1,4 +1,5 @@
 import logging
+import json
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login
@@ -6,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group, User
 from django.contrib import messages
 from django.db.models import Sum
+from django.core.serializers.json import DjangoJSONEncoder
 
 from blood.models import BloodRequest
 from blood.forms import FeedbackForm
@@ -138,6 +140,8 @@ def patient_dashboard_view(request):
         # Get recent requests
         recent_requests = requests.order_by('-date')[:5]
         recent_feedbacks = Feedback.objects.filter(patient=patient).order_by('-created_at')[:5]
+        from blood.models import VerificationBadge
+        verification_badge = VerificationBadge.objects.filter(patient=patient).order_by('-verified_at', '-id').first()
         
         context = {
             'patient': patient,
@@ -149,6 +153,7 @@ def patient_dashboard_view(request):
             'total_approved_units': total_approved_units,
             'recent_requests': recent_requests,
             'recent_feedbacks': recent_feedbacks,
+            'verification_badge': verification_badge,
         }
     except Patient.DoesNotExist:
         messages.error(request, 'Patient profile not found. Please contact support.')
@@ -161,9 +166,73 @@ def patient_dashboard_view(request):
             'total_units_requested': 0,
             'total_approved_units': 0,
             'recent_requests': [],
+            'verification_badge': None,
         }
     
     return render(request, 'patient/patient_dashboard.html', context)
+
+
+@login_required
+def patient_nearby_donors_view(request):
+    if not request.user.groups.filter(name='PATIENT').exists():
+        messages.error(request, 'Access denied. Patient account required.')
+        return redirect('patientlogin')
+
+    patient = get_object_or_404(Patient, user=request.user)
+    from donor.models import Donor
+
+    latest_zip = (
+        BloodRequest.objects.filter(patient=patient)
+        .exclude(request_zipcode='')
+        .order_by('-date', '-id')
+        .values_list('request_zipcode', flat=True)
+        .first()
+    )
+    zipcode = (request.GET.get('zipcode') or latest_zip or '').strip()
+    bloodgroup = (request.GET.get('bloodgroup') or '').strip()
+
+    donor_qs = Donor.objects.filter(is_available=True).select_related('user')
+    if bloodgroup:
+        donor_qs = donor_qs.filter(bloodgroup=bloodgroup)
+    if zipcode:
+        donor_qs = donor_qs.filter(zipcode=zipcode)
+
+    donors = []
+    for donor in donor_qs[:120]:
+        distance_km = None
+        eta = 'N/A'
+        if donor.latitude is not None and donor.longitude is not None and zipcode and donor.zipcode and donor.zipcode == zipcode:
+            distance_km = 0
+            eta = '~15 min (same area)'
+        donors.append({
+            'id': donor.id,
+            'name': donor.get_name,
+            'bloodgroup': donor.bloodgroup,
+            'mobile': donor.mobile,
+            'address': donor.address,
+            'zipcode': donor.zipcode,
+            'latitude': float(donor.latitude) if donor.latitude is not None else None,
+            'longitude': float(donor.longitude) if donor.longitude is not None else None,
+            'location_verified': donor.location_verified,
+            'distance_km': distance_km,
+            'eta': eta,
+        })
+
+    if donors and donors[0]['latitude'] is not None:
+        map_center = {'lat': donors[0]['latitude'], 'lng': donors[0]['longitude']}
+    else:
+        map_center = {'lat': 20.5937, 'lng': 78.9629}
+
+    context = {
+        'patient': patient,
+        'zipcode': zipcode,
+        'bloodgroup': bloodgroup,
+        'donors': donors,
+        'donor_map_json': json.dumps(donors, cls=DjangoJSONEncoder),
+        'blood_groups': ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
+        'map_center': map_center,
+    }
+    return render(request, 'patient/nearby_donors.html', context)
 
 
 @login_required
@@ -294,6 +363,17 @@ def patient_request_view(request):
                 status='Pending',
                 is_urgent=is_urgent,
                 request_zipcode=request_zipcode,
+            )
+
+            from blood.models import InAppNotification
+            InAppNotification.objects.create(
+                patient=patient,
+                related_request=blood_request,
+                title='Blood Request Submitted',
+                message=(
+                    f'Your blood request #{blood_request.id} for {unit}ml '
+                    f'({bloodgroup}) has been submitted and is pending review.'
+                ),
             )
             
             success_msg = (

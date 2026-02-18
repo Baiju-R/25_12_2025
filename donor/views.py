@@ -1,12 +1,16 @@
 import logging
+from datetime import datetime, time, timedelta
 
+from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group, User
 from django.contrib import messages
-from django.db.models import Sum
+from django.conf import settings
+from django.db.models import Sum, Q, Count, F
 from django.views.decorators.http import require_POST
+from django.utils import timezone
 
 from blood.services import sms as sms_service
 from blood.forms import FeedbackForm
@@ -15,6 +19,90 @@ from .forms import DonorUserForm, DonorForm
 from .models import Donor, BloodDonate
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_default_appointment_slots_exist(*, created_by=None) -> int:
+    """Create a few upcoming appointment slots when none are available.
+
+    Fresh installs/demo databases often have zero slots, which makes the booking UI
+    show "No active slots". This helper seeds a small number of near-term slots.
+
+    Controlled by `settings.AUTO_SEED_APPOINTMENT_SLOTS` (default: settings.DEBUG).
+    """
+
+    from blood.models import DonationAppointmentSlot
+
+    allow_seed = getattr(settings, 'AUTO_SEED_APPOINTMENT_SLOTS', True)
+    if not allow_seed:
+        return 0
+
+    now = timezone.now()
+    if DonationAppointmentSlot.objects.filter(is_active=True, end_at__gte=now).exists():
+        return 0
+
+    # Avoid unbounded growth if slots exist but are all inactive/expired.
+    if DonationAppointmentSlot.objects.count() >= 80:
+        return 0
+
+    tz = timezone.get_current_timezone()
+    local_now = timezone.localtime(now)
+    start_date = local_now.date()
+    if local_now.hour >= 18:
+        start_date = start_date + timedelta(days=1)
+
+    created = 0
+    # Two slots per day for the next 3 days.
+    for day_offset in range(0, 3):
+        day = start_date + timedelta(days=day_offset)
+        for hour in (10, 14):
+            naive_start = datetime.combine(day, time(hour=hour, minute=0))
+            start_at = timezone.make_aware(naive_start, tz)
+            end_at = start_at + timedelta(hours=1)
+
+            DonationAppointmentSlot.objects.create(
+                start_at=start_at,
+                end_at=end_at,
+                capacity=10,
+                is_active=True,
+                notes='Auto-generated slot (edit in Admin > Appointments)',
+                created_by=created_by if getattr(created_by, 'is_authenticated', False) else None,
+            )
+            created += 1
+
+    return created
+
+
+def _donor_eligibility_summary(donor: Donor) -> dict:
+    reasons = []
+    today = timezone.now().date()
+
+    if not donor.is_available:
+        reasons.append('You are currently marked unavailable.')
+
+    if donor.age_years is not None and (donor.age_years < 18 or donor.age_years > 65):
+        reasons.append('Age must be between 18 and 65 for donation.')
+
+    if donor.weight_kg is not None and donor.weight_kg < 45:
+        reasons.append('Minimum weight requirement is 45 kg.')
+
+    if donor.hemoglobin_g_dl is not None and float(donor.hemoglobin_g_dl) < 12.5:
+        reasons.append('Hemoglobin should be at least 12.5 g/dL.')
+
+    if donor.has_chronic_disease:
+        reasons.append('Chronic disease requires manual medical review.')
+
+    next_date = donor.next_eligible_donation_date
+    if next_date and next_date > today:
+        remaining = (next_date - today).days
+        reasons.append(f'Recovery period active. Eligible again in {remaining} day(s).')
+
+    eligible = len(reasons) == 0
+    return {
+        'is_eligible': eligible,
+        'label': 'Eligible to Donate' if eligible else 'Not Eligible Yet',
+        'reasons': reasons,
+        'next_eligible_date': next_date,
+    }
 
 
 @login_required
@@ -160,6 +248,35 @@ def donor_dashboard_view(request):
         recent_donations = donations.order_by('-date')[:5]
         recent_requests = blood_requests.order_by('-date')[:5]
         recent_feedbacks = Feedback.objects.filter(donor=donor).order_by('-created_at')[:5]
+        from blood.models import InAppNotification, VerificationBadge
+        notifications = InAppNotification.objects.filter(donor=donor).order_by('-created_at')[:5]
+        badge = VerificationBadge.objects.filter(donor=donor).order_by('-verified_at', '-id').first()
+
+        eligibility = _donor_eligibility_summary(donor)
+
+        approved_donation_qs = donations.filter(status='Approved').order_by('-date', '-id')
+        donation_dates = [entry.date for entry in approved_donation_qs[:12]]
+        streak = 0
+        previous = None
+        for donated_on in donation_dates:
+            if previous is None:
+                streak = 1
+                previous = donated_on
+                continue
+            if (previous - donated_on).days <= 90:
+                streak += 1
+                previous = donated_on
+            else:
+                break
+
+        milestones = [1, 3, 5, 10, 20]
+        next_milestone = next((m for m in milestones if approved_donations < m), None)
+        city_leaders = (
+            Donor.objects.exclude(zipcode='')
+            .values('zipcode')
+            .annotate(total_units=Sum('blooddonate__unit', filter=Q(blooddonate__status='Approved')))
+            .order_by('-total_units')[:5]
+        )
         
         logger.debug("Donor statistics: Donations=%s, Requests=%s", total_donations, requestmade)
         
@@ -177,6 +294,13 @@ def donor_dashboard_view(request):
             'request_rejected': request_rejected,
             'recent_requests': recent_requests,
             'recent_feedbacks': recent_feedbacks,
+            'eligibility': eligibility,
+            'verification_badge': badge,
+            'notifications': notifications,
+            'donation_streak': streak,
+            'next_milestone': next_milestone,
+            'lives_helped': max(1, total_units_donated // 350) if total_units_donated else 0,
+            'city_leaders': city_leaders,
         }
         
     except Donor.DoesNotExist:
@@ -195,6 +319,13 @@ def donor_dashboard_view(request):
             'request_rejected': 0,
             'recent_donations': [],
             'recent_requests': [],
+            'eligibility': {'is_eligible': False, 'label': 'Profile Missing', 'reasons': ['Profile unavailable.'], 'next_eligible_date': None},
+            'verification_badge': None,
+            'notifications': [],
+            'donation_streak': 0,
+            'next_milestone': None,
+            'lives_helped': 0,
+            'city_leaders': [],
         }
     except Exception as e:
         logger.exception("Error in donor dashboard")
@@ -212,6 +343,13 @@ def donor_dashboard_view(request):
             'request_rejected': 0,
             'recent_donations': [],
             'recent_requests': [],
+            'eligibility': {'is_eligible': False, 'label': 'Unavailable', 'reasons': ['Could not evaluate eligibility.'], 'next_eligible_date': None},
+            'verification_badge': None,
+            'notifications': [],
+            'donation_streak': 0,
+            'next_milestone': None,
+            'lives_helped': 0,
+            'city_leaders': [],
         }
     
     logger.debug("Rendering donor dashboard with context keys: %s", list(context.keys()))
@@ -296,13 +434,23 @@ def donate_blood_view(request):
             return render(request, 'donor/donate_blood.html', {'donor': donor})
         
         try:
-            BloodDonate.objects.create(
+            donation = BloodDonate.objects.create(
                 donor=donor,
                 disease=disease,
                 age=int(age),
                 bloodgroup=bloodgroup,
                 unit=int(unit),
                 status='Pending'
+            )
+
+            from blood.models import InAppNotification
+            InAppNotification.objects.create(
+                donor=donor,
+                title='Donation Request Submitted',
+                message=(
+                    f'Your donation request #{donation.id} for {int(unit)}ml '
+                    f'({bloodgroup}) is pending admin review.'
+                ),
             )
             
             messages.success(request, f'Donation request submitted successfully! {unit}ml of {bloodgroup} blood donation pending approval.')
@@ -458,6 +606,17 @@ def donor_request_blood_view(request):
                 is_urgent=is_urgent,
                 request_zipcode=request_zipcode,
             )
+
+            from blood.models import InAppNotification
+            InAppNotification.objects.create(
+                donor=donor,
+                related_request=blood_request,
+                title='Blood Request Submitted',
+                message=(
+                    f'Your blood request #{blood_request.id} for {unit}ml '
+                    f'({bloodgroup}) has been submitted and is pending review.'
+                ),
+            )
             
             success_msg = (
                 f'Blood request submitted successfully! Requested {unit}ml of {bloodgroup} blood for {patient_name}.'
@@ -547,3 +706,95 @@ def donor_request_history_view(request):
         }
     
     return render(request, 'donor/request_history.html', context)
+
+
+@login_required
+def donor_appointments_view(request):
+    if not request.user.groups.filter(name='DONOR').exists():
+        messages.error(request, 'Access denied. Donor account required.')
+        return redirect('donorlogin')
+
+    donor = get_object_or_404(Donor, user=request.user)
+    from blood.models import DonationAppointmentSlot, DonationAppointment
+
+    reserving_statuses = {
+        DonationAppointment.STATUS_PENDING,
+        DonationAppointment.STATUS_APPROVED,
+        DonationAppointment.STATUS_RESCHEDULED,
+    }
+
+    # Ensure fresh/demo installs have something to book.
+    try:
+        _ensure_default_appointment_slots_exist()
+    except Exception as exc:  # pragma: no cover - non-blocking
+        logger.warning("Failed to auto-seed appointment slots: %s", exc)
+
+    if request.method == 'POST':
+        slot_id = (request.POST.get('slot_id') or '').strip()
+        notes = (request.POST.get('notes') or '').strip()[:255]
+        if not slot_id.isdigit():
+            messages.error(request, 'Please select a valid slot.')
+            return redirect('donor-appointments')
+        with transaction.atomic():
+            slot = (
+                DonationAppointmentSlot.objects
+                .select_for_update()
+                .filter(id=int(slot_id), is_active=True, end_at__gte=timezone.now())
+                .first()
+            )
+            if not slot:
+                messages.error(request, 'Selected slot is not available.')
+                return redirect('donor-appointments')
+
+            # Prevent duplicate/conflicting bookings for the same donor within the slot window.
+            has_conflict = DonationAppointment.objects.filter(
+                donor=donor,
+                status__in=reserving_statuses,
+            ).filter(
+                Q(slot=slot)
+                | Q(requested_for__gte=slot.start_at, requested_for__lt=slot.end_at)
+            ).exists()
+            if has_conflict:
+                messages.error(request, 'You already have an appointment request for this time slot.')
+                return redirect('donor-appointments')
+
+            booked_count = DonationAppointment.objects.filter(
+                slot=slot,
+                status__in=reserving_statuses,
+            ).count()
+            if booked_count >= int(slot.capacity or 0):
+                messages.error(request, 'Selected slot is full. Please choose another slot.')
+                return redirect('donor-appointments')
+
+            DonationAppointment.objects.create(
+                donor=donor,
+                slot=slot,
+                requested_for=slot.start_at,
+                notes=notes,
+                status=DonationAppointment.STATUS_PENDING,
+            )
+
+        from blood.models import InAppNotification
+        InAppNotification.objects.create(
+            donor=donor,
+            title='Appointment Request Submitted',
+            message=f'Your appointment request for {slot.start_at:%d %b %Y %H:%M} is pending admin confirmation.',
+        )
+        messages.success(request, 'Appointment request submitted. Admin will confirm shortly.')
+        return redirect('donor-appointments')
+
+    slots_qs = (
+        DonationAppointmentSlot.objects
+        .filter(is_active=True, end_at__gte=timezone.now())
+        .annotate(
+            booked_count=Count('donationappointment', filter=Q(donationappointment__status__in=reserving_statuses)),
+        )
+        .filter(booked_count__lt=F('capacity'))
+        .order_by('start_at')[:25]
+    )
+    slots = list(slots_qs)
+    for slot in slots:
+        booked = int(getattr(slot, 'booked_count', 0) or 0)
+        slot.remaining = max(int(slot.capacity or 0) - booked, 0)
+    appointments = DonationAppointment.objects.filter(donor=donor).select_related('slot').order_by('-requested_at')[:25]
+    return render(request, 'donor/appointment_booking.html', {'slots': slots, 'appointments': appointments})

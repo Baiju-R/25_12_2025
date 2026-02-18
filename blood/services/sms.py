@@ -194,12 +194,14 @@ def _select_donors_for_alert(blood_request) -> Sequence[Tuple[Donor, str]]:
 		)
 	).order_by('zip_match', 'last_notified_at', 'id')
 
-	max_recipients = max(settings.AWS_SNS_MAX_RECIPIENTS, 1)
+	max_recipients = int(getattr(settings, "AWS_SNS_MAX_RECIPIENTS", 0) or 0)
+	unlimited_recipients = max_recipients <= 0
 	donors: List[Tuple[Donor, str]] = []
 	seen_numbers = set()
 	
 	skipped_invalid = 0
-	for donor in ordered_queryset[: max_recipients * 2]:  # light over-fetch to offset formatting skips
+	queryset_to_scan = ordered_queryset if unlimited_recipients else ordered_queryset[: max_recipients * 2]
+	for donor in queryset_to_scan:  # light over-fetch in limited mode to offset formatting skips
 		formatted = _normalize_phone_number(donor.mobile)
 		if not formatted:
 			skipped_invalid += 1
@@ -208,7 +210,7 @@ def _select_donors_for_alert(blood_request) -> Sequence[Tuple[Donor, str]]:
 			continue
 		donors.append((donor, formatted))
 		seen_numbers.add(formatted)
-		if len(donors) >= max_recipients:
+		if (not unlimited_recipients) and len(donors) >= max_recipients:
 			break
 			
 	if skipped_invalid > 0:

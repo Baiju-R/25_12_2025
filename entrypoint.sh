@@ -33,5 +33,6 @@ fi
 exec gunicorn bloodbankmanagement.wsgi:application \
   --bind 0.0.0.0:${PORT:-8080} \
   --workers ${GUNICORN_WORKERS:-1} \
-  --log-file - \
+  --access-logfile ${GUNICORN_ACCESS_LOGFILE:--} \
+  --error-logfile ${GUNICORN_ERROR_LOGFILE:--} \
   --timeout ${GUNICORN_TIMEOUT:-120}

@@ -2,6 +2,50 @@
 
 This document outlines all automatic SMS notifications triggered by the Blood Bank Management System.
 
+## Complete Notification Flow (SMS + In-App)
+
+The platform now emits notifications for all major lifecycle actions:
+
+1. **Blood Request Submitted**
+	- **Who:** Request owner (Donor/Patient)
+	- **Channel:** In-App
+	- **Where:** Donor/Patient request submit views
+
+2. **Urgent Blood Request Submitted**
+	- **Who:** Matching available donors
+	- **Channel:** SMS (+ broadcast delivery logs)
+	- **Where:** `notify_matched_donors`
+
+3. **Requester Confirmation (Urgent)**
+	- **Who:** Request owner contact number
+	- **Channel:** SMS
+	- **Where:** `send_requester_confirmation`
+
+4. **Blood Request Approved / Rejected**
+	- **Who:** Request owner
+	- **Channel:** In-App + SMS
+	- **Where:** Admin request approval/rejection flows
+
+5. **Donation Submitted**
+	- **Who:** Donor
+	- **Channel:** In-App
+	- **Where:** Donor donation submit flow
+
+6. **Donation Approved / Rejected**
+	- **Who:** Donor
+	- **Channel:** In-App + SMS
+	- **Where:** Admin donation approval/rejection flows
+
+7. **Appointment Requested / Status Updated**
+	- **Who:** Donor
+	- **Channel:** In-App
+	- **Where:** Appointment booking and admin appointment status update
+
+8. **Verification Badge Updated**
+	- **Who:** Donor/Patient
+	- **Channel:** In-App
+	- **Where:** Admin verification updates
+
 ## 1. New Blood Request (Matching Engine)
 **Trigger:** A new blood request is submitted by a Patient or Donor.
 **Target:** Compatible Donors nearby.
@@ -59,6 +103,26 @@ This document outlines all automatic SMS notifications triggered by the Blood Ba
 - **Sender ID:** None (Uses AWS Default/Random) to ensure delivery in India (DLT Compliance).
 - **Phone Formatting:** Automatic E.164 normalization (+91...).
 - **Delivery:** Transactional SMS via AWS SNS (ap-south-1).
+
+## Reliability / Permanent Operations Checklist
+
+To keep SMS working long-term (including key rotations), use this setup:
+
+1. **Use IAM Role in production** (EC2/ECS/Cloud Run/VM workload identity) instead of hard-coded keys.
+2. If using temporary credentials locally, always include all 3 values:
+	- `AWS_ACCESS_KEY_ID`
+	- `AWS_SECRET_ACCESS_KEY`
+	- `AWS_SESSION_TOKEN`
+3. Keep region explicit: `AWS_SNS_REGION=ap-south-1`.
+4. Grant least-privilege IAM permissions:
+	- `sns:Publish`
+	- `sns:GetSMSAttributes`
+	- `sts:GetCallerIdentity`
+5. Run health checks before go-live and after any credential rotation:
+	- `py manage.py sms_health_check`
+	- Optional live probe: `py manage.py sms_health_check --to 9361046558 --probe`
+
+The health command validates AWS auth and SNS access first, then optionally sends one probe SMS.
 
 ## Background Sending (Celery)
 

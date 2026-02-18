@@ -1,11 +1,15 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from donor.forms import DonorForm
 from donor import models as dmodels
+
+from blood import models as blood_models
 
 
 class DonorFormGeoTests(TestCase):
@@ -133,3 +137,77 @@ class DonorAutoGeocodeSignalTests(TestCase):
 		self.assertIsNotNone(donor.longitude)
 		self.assertEqual(str(donor.latitude), '12.971599')
 		self.assertEqual(str(donor.longitude), '77.594566')
+
+
+@override_settings(AUTO_SEED_APPOINTMENT_SLOTS=False)
+class DonorAppointmentSlotCapacityTests(TestCase):
+	def setUp(self):
+		from django.contrib.auth.models import Group
+		self.client = Client()
+		self.group, _ = Group.objects.get_or_create(name='DONOR')
+		self.user = User.objects.create_user(username='donor_user', password='pass1234', first_name='Donor', last_name='One')
+		self.group.user_set.add(self.user)
+		self.donor = dmodels.Donor.objects.create(
+			user=self.user,
+			bloodgroup='A+',
+			address='Addr',
+			mobile='1234567890',
+			sex='U',
+		)
+
+		other_user = User.objects.create_user(username='donor_other', password='pass1234', first_name='Other', last_name='Donor')
+		self.group.user_set.add(other_user)
+		self.other_donor = dmodels.Donor.objects.create(
+			user=other_user,
+			bloodgroup='A+',
+			address='Addr',
+			mobile='1234567891',
+			sex='U',
+		)
+
+	def test_full_slot_hidden_and_rejected(self):
+		now = timezone.now()
+		slot = blood_models.DonationAppointmentSlot.objects.create(
+			start_at=now + timedelta(hours=2),
+			end_at=now + timedelta(hours=3),
+			capacity=1,
+			is_active=True,
+		)
+		# Fill the slot with another donor's pending appointment.
+		blood_models.DonationAppointment.objects.create(
+			donor=self.other_donor,
+			slot=slot,
+			requested_for=slot.start_at,
+			status=blood_models.DonationAppointment.STATUS_PENDING,
+		)
+
+		self.client.force_login(self.user)
+		response = self.client.get(reverse('donor-appointments'))
+		self.assertEqual(response.status_code, 200)
+		slots = list(response.context['slots'])
+		self.assertTrue(all(s.id != slot.id for s in slots))
+
+		post = self.client.post(reverse('donor-appointments'), {'slot_id': slot.id, 'notes': 'x'}, follow=True)
+		self.assertEqual(post.status_code, 200)
+		self.assertContains(post, 'Selected slot is full', status_code=200)
+
+	def test_duplicate_booking_blocked(self):
+		now = timezone.now()
+		slot = blood_models.DonationAppointmentSlot.objects.create(
+			start_at=now + timedelta(hours=2),
+			end_at=now + timedelta(hours=3),
+			capacity=5,
+			is_active=True,
+		)
+
+		blood_models.DonationAppointment.objects.create(
+			donor=self.donor,
+			slot=slot,
+			requested_for=slot.start_at,
+			status=blood_models.DonationAppointment.STATUS_PENDING,
+		)
+
+		self.client.force_login(self.user)
+		post = self.client.post(reverse('donor-appointments'), {'slot_id': slot.id, 'notes': 'another'}, follow=True)
+		self.assertEqual(post.status_code, 200)
+		self.assertContains(post, 'already have an appointment request', status_code=200)

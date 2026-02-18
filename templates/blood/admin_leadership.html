@@ -198,7 +198,11 @@
                 <div class="hero-card rank-{{ donor.rank }}">
                     <div class="hero-rank">#{{ donor.rank }}</div>
                     <div class="hero-avatar">
-                        <img src="{{ donor.profile_pic }}" alt="{{ donor.name }}">
+                        <img src="{{ donor.profile_pic }}"
+                             alt="{{ donor.name }}"
+                             data-random-src="{{ donor.random_profile_pic }}"
+                             data-placeholder-src="{{ donor.placeholder_avatar_url }}"
+                             onerror="if(!this.dataset.fallbackApplied){this.dataset.fallbackApplied='1'; this.src=this.dataset.randomSrc; return;} this.onerror=null; this.src=this.dataset.placeholderSrc;">
                     </div>
                     <div class="hero-info">
                         <h4>{{ donor.name }}</h4>
@@ -217,7 +221,11 @@
                         <div class="member-rank">#{{ donor.rank }}</div>
                         <div class="member-core">
                             <div class="avatar">
-                                <img src="{{ donor.profile_pic }}" alt="{{ donor.name }}">
+                                <img src="{{ donor.profile_pic }}"
+                                     alt="{{ donor.name }}"
+                                     data-random-src="{{ donor.random_profile_pic }}"
+                                     data-placeholder-src="{{ donor.placeholder_avatar_url }}"
+                                     onerror="if(!this.dataset.fallbackApplied){this.dataset.fallbackApplied='1'; this.src=this.dataset.randomSrc; return;} this.onerror=null; this.src=this.dataset.placeholderSrc;">
                             </div>
                             <div>
                                 <h4>{{ donor.name }}</h4>
@@ -247,7 +255,11 @@
                         {% for activity in recent_activity %}
                             <div class="recent-item">
                                 <div class="hero-avatar" style="width:48px;height:48px;border-radius:14px;">
-                                    <img src="{{ activity.profile_pic }}" alt="{{ activity.name }}">
+                                    <img src="{{ activity.profile_pic }}"
+                                         alt="{{ activity.name }}"
+                                         data-random-src="{{ activity.random_profile_pic }}"
+                                         data-placeholder-src="{{ activity.placeholder_avatar_url }}"
+                                         onerror="if(!this.dataset.fallbackApplied){this.dataset.fallbackApplied='1'; this.src=this.dataset.randomSrc; return;} this.onerror=null; this.src=this.dataset.placeholderSrc;">
                                 </div>
                                 <div>
                                     <strong>{{ activity.name }}</strong>

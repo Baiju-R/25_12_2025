@@ -10,5 +10,6 @@ urlpatterns = [
     path('my-donations/', views.donor_history_view, name='donor-history'),
     path('make-request/', views.donor_request_blood_view, name='donor-request-blood'),
     path('request-history/', views.donor_request_history_view, name='donor-request-history'),
+    path('appointments/', views.donor_appointments_view, name='donor-appointments'),
     path('feedback/', views.donor_feedback_create_view, name='donor-feedback'),
 ]

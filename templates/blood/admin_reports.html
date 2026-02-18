@@ -1,0 +1,123 @@
+{% extends 'blood/adminbase.html' %}
+{% block content %}
+
+<style>
+    .report-shell { padding: 20px 0; }
+    .report-card { background:#fff; border-radius:16px; border:1px solid #e5e7eb; box-shadow:0 12px 30px rgba(0,0,0,0.08); margin-bottom:16px; }
+    .report-head { padding:16px 18px; border-bottom:1px solid #e5e7eb; }
+    .report-body { padding:16px 18px; }
+    .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; }
+    .kpi { border:1px solid #e5e7eb; border-radius:12px; padding:12px; background:#f8fafc; }
+    .kpi .lbl { font-size:0.8rem; color:#64748b; text-transform:uppercase; font-weight:700; }
+    .kpi .val { font-size:1.4rem; font-weight:800; color:#0f172a; }
+    .tiny { font-size:0.82rem; color:#64748b; }
+    .status-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; }
+    .status-chip { border:1px solid #e5e7eb; border-radius:10px; background:#fff; padding:10px; }
+</style>
+
+<div class="report-shell">
+    <div class="report-card">
+        <div class="report-head">
+            <h4 style="margin:0;"><i class="fas fa-file-export"></i> Reports Center</h4>
+            <small style="color:#6b7280;">Export stock, request and fulfillment reports in CSV/PDF.</small>
+        </div>
+        <div class="report-body">
+            <form method="get" class="form-inline" style="gap:10px;flex-wrap:wrap;">
+                <input type="date" name="start_date" value="{{ start_date_value }}" class="form-control" />
+                <input type="date" name="end_date" value="{{ end_date_value }}" class="form-control" />
+                <button class="btn btn-primary" type="submit">Apply Range</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="report-card">
+        <div class="report-head"><strong>Fulfillment Snapshot</strong></div>
+        <div class="report-body">
+            <div class="kpi-grid">
+                <div class="kpi"><div class="lbl">Requests</div><div class="val">{{ summary.total_requests }}</div></div>
+                <div class="kpi"><div class="lbl">Approved Requests</div><div class="val">{{ summary.approved_requests }}</div></div>
+                <div class="kpi"><div class="lbl">Pending Requests</div><div class="val">{{ summary.pending_requests }}</div></div>
+                <div class="kpi"><div class="lbl">Approved Donations</div><div class="val">{{ summary.approved_donations }}</div></div>
+                <div class="kpi"><div class="lbl">Stock (ml)</div><div class="val">{{ summary.stock_units }}</div></div>
+                <div class="kpi"><div class="lbl">Fulfillment</div><div class="val">{{ summary.fulfillment_rate }}%</div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="report-card">
+        <div class="report-head"><strong>Export</strong></div>
+        <div class="report-body table-responsive">
+            <table class="table table-bordered">
+                <thead>
+                    <tr><th>Report</th><th>CSV</th><th>PDF</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Blood Stock</td>
+                        <td><a class="btn btn-sm btn-outline-primary" href="{% url 'admin-reports-export' 'stock' 'csv' %}{% if export_query %}?{{ export_query }}{% endif %}">Download CSV</a></td>
+                        <td><a class="btn btn-sm btn-outline-danger" href="{% url 'admin-reports-export' 'stock' 'pdf' %}{% if export_query %}?{{ export_query }}{% endif %}">Download PDF</a></td>
+                    </tr>
+                    <tr>
+                        <td>Blood Requests</td>
+                        <td><a class="btn btn-sm btn-outline-primary" href="{% url 'admin-reports-export' 'requests' 'csv' %}{% if export_query %}?{{ export_query }}{% endif %}">Download CSV</a></td>
+                        <td><a class="btn btn-sm btn-outline-danger" href="{% url 'admin-reports-export' 'requests' 'pdf' %}{% if export_query %}?{{ export_query }}{% endif %}">Download PDF</a></td>
+                    </tr>
+                    <tr>
+                        <td>Fulfillment</td>
+                        <td><a class="btn btn-sm btn-outline-primary" href="{% url 'admin-reports-export' 'fulfillment' 'csv' %}{% if export_query %}?{{ export_query }}{% endif %}">Download CSV</a></td>
+                        <td><a class="btn btn-sm btn-outline-danger" href="{% url 'admin-reports-export' 'fulfillment' 'pdf' %}{% if export_query %}?{{ export_query }}{% endif %}">Download PDF</a></td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="tiny">Export honors the selected date range when provided.</div>
+        </div>
+    </div>
+
+    <div class="report-card">
+        <div class="report-head"><strong>Operational Status Breakdown</strong></div>
+        <div class="report-body">
+            <div class="status-grid">
+                <div class="status-chip"><strong>Requests Pending:</strong> {{ status_breakdown.requests_pending }}</div>
+                <div class="status-chip"><strong>Requests Approved:</strong> {{ status_breakdown.requests_approved }}</div>
+                <div class="status-chip"><strong>Requests Rejected:</strong> {{ status_breakdown.requests_rejected }}</div>
+                <div class="status-chip"><strong>Donations Pending:</strong> {{ status_breakdown.donations_pending }}</div>
+                <div class="status-chip"><strong>Donations Approved:</strong> {{ status_breakdown.donations_approved }}</div>
+                <div class="status-chip"><strong>Donations Rejected:</strong> {{ status_breakdown.donations_rejected }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="report-card">
+        <div class="report-head"><strong>Recent Export Activity</strong></div>
+        <div class="report-body table-responsive">
+            <table class="table table-sm table-bordered">
+                <thead>
+                    <tr>
+                        <th>When</th>
+                        <th>Report</th>
+                        <th>Format</th>
+                        <th>Rows</th>
+                        <th>Actor</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in recent_exports %}
+                        <tr>
+                            <td>{{ row.created_at|date:"d M Y H:i" }}</td>
+                            <td>{{ row.report_key }}</td>
+                            <td>{{ row.export_format|upper }}</td>
+                            <td>{{ row.rows_exported }}</td>
+                            <td>{{ row.actor_username|default:'system' }}</td>
+                            <td>{{ row.status }}{% if row.error %} — {{ row.error }}{% endif %}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6" class="text-center text-muted">No exports logged yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}

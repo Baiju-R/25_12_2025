@@ -1,13 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    {% load static %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BloodBridge Admin</title>
+    <meta name="theme-color" content="#e74c3c">
+    <link rel="manifest" href="/static/manifest.webmanifest">
 
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.14.0/css/all.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/responsive-enhancements.css' %}">
 
     <style>
         /* Enhanced Admin Base Styles */
@@ -66,14 +70,16 @@
         .wrapper {
             display: flex;
             position: relative;
+            padding-top: 72px;
         }
 
         .wrapper .sidebar {
             width: 260px;
-            height: 100vh;
+            height: calc(100vh - 72px);
             background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
             padding: 30px 0px;
             position: fixed;
+            top: 72px;
             box-shadow: 2px 0 20px rgba(0,0,0,0.1);
             overflow-y: auto;
         }
@@ -157,6 +163,25 @@
             transition: all 0.3s ease;
         }
 
+        /* Backdrop overlay for mobile sidebar */
+        .sidebar-backdrop {
+            display: none;
+            position: fixed;
+            top: 72px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 998;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar-backdrop.active {
+            display: block;
+            opacity: 1;
+        }
+
         .wrapper .main_content .header {
             padding: 25px 30px;
             background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
@@ -200,6 +225,10 @@
 
             .navbar-brand {
                 font-size: 1.1rem !important;
+            }
+
+            .wrapper .main_content .header {
+                padding: 18px 12px;
             }
         }
 
@@ -292,7 +321,7 @@
         </div>
     </nav>
 
-    <br><br>
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
     <div class="wrapper">
         <div class="sidebar">
             <div class="sidebar-header">
@@ -309,6 +338,10 @@
                 <li><a href="/admin-donation"><i class="fas fa-hand-holding-water"></i> Donations</a></li>
                 <li><a href="/admin-leadership/"><i class="fas fa-trophy"></i> Leadership</a></li>
                 <li><a href="/admin-analytics"><i class="fas fa-chart-line"></i> Analytics</a></li>
+                <li><a href="{% url 'admin-appointments' %}"><i class="fas fa-calendar-check"></i> Appointments</a></li>
+                <li><a href="{% url 'admin-verification' %}"><i class="fas fa-shield-alt"></i> Verification</a></li>
+                <li><a href="{% url 'admin-audit-logs' %}"><i class="fas fa-clipboard-check"></i> Audit Logs</a></li>
+                <li><a href="{% url 'admin-reports' %}"><i class="fas fa-file-export"></i> Reports</a></li>
                 <li><a href="{% url 'admin-feedback-list' %}"><i class="fas fa-comment-dots"></i> Feedback</a></li>
             </ul>
         </div>
@@ -363,8 +396,30 @@
     <script>
         function toggleSidebar() {
             const sidebar = document.querySelector('.sidebar');
+            const backdrop = document.getElementById('sidebarBackdrop');
             sidebar.classList.toggle('active');
+            backdrop.classList.toggle('active');
         }
+
+        // Close sidebar on outside click / Esc on mobile
+        document.addEventListener('keydown', function(e) {
+            if (e.key !== 'Escape') return;
+            const sidebar = document.querySelector('.sidebar');
+            const backdrop = document.getElementById('sidebarBackdrop');
+            if (window.innerWidth <= 768 && sidebar.classList.contains('active')) {
+                sidebar.classList.remove('active');
+                backdrop.classList.remove('active');
+            }
+        });
+
+        window.addEventListener('resize', function() {
+            const sidebar = document.querySelector('.sidebar');
+            const backdrop = document.getElementById('sidebarBackdrop');
+            if (window.innerWidth > 768) {
+                sidebar.classList.remove('active');
+                backdrop.classList.remove('active');
+            }
+        });
         
         // Set active menu item
         const currentPath = window.location.pathname;
@@ -378,6 +433,12 @@
                 link.parentElement.classList.add('active');
             }
         });
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/service-worker.js').catch(function() {});
+            });
+        }
     </script>
 
     {% block extra_scripts %}{% endblock %}

@@ -89,14 +89,48 @@ AWS_SNS_ENABLED=true
 AWS_SNS_REGION=ap-south-1
 AWS_SNS_DEFAULT_COUNTRY_CODE=+91
 AWS_SNS_SENDER_ID=BLDBRDG
-AWS_SNS_MAX_RECIPIENTS=25
+AWS_SNS_MAX_RECIPIENTS=0
 AWS_SNS_MIN_NOTIFICATION_GAP_SECONDS=1800
 ```
+
+- `AWS_SNS_MAX_RECIPIENTS=0` means unlimited recipients (use a positive number to cap alerts per urgent request).
+
+### Production Safety Guard
+
+- The app now supports explicit environment mode via `ENVIRONMENT`.
+- Set `ENVIRONMENT=production` in real deployments. In this mode the app fails fast if security-critical settings are unsafe.
+
+Required production variables:
+
+```
+ENVIRONMENT=production
+DEBUG=False
+SECRET_KEY=<strong-random-secret>
+ALLOWED_HOSTS=<your-domain-or-ip>
+```
+
+When `ENVIRONMENT=production`, startup will reject insecure defaults (for example Django auto `SECRET_KEY` or `DEBUG=True`).
 
 - Configure AWS credentials with `aws configure` (or environment variables) on the same host running Django so boto3 can publish SMS messages.
 - Donors must have valid E.164 phone numbers on their profiles; the helper falls back to the default country code for 10-digit numbers but storing `+<country><number>` avoids any ambiguity.
 - When an urgent request is submitted (quick form, donor, or patient portals) the platform fetches available donors with matching blood groups, prioritizes those in the same zip/postal code, and texts up to `AWS_SNS_MAX_RECIPIENTS` recipients. Donor `last_notified_at` timestamps ensure no one is spammed more often than the configured gap.
 - Missing dependencies or SNS failures are logged server-side so requests still succeed even if alerts cannot be delivered.
+
+### SMS Health Check (Recommended)
+
+Before demos/deployments, verify credentials + SNS permissions:
+
+```
+py manage.py sms_health_check
+```
+
+To send one live probe SMS after health passes:
+
+```
+py manage.py sms_health_check --to 9361046558 --probe
+```
+
+If you use temporary AWS credentials, ensure `AWS_SESSION_TOKEN` is set along with key + secret.
 
 #### Start Ngrok Automatically
 Skip the manual Ngrok download step by using the built-in helper that relies on [pyngrok](https://github.com/alexdlaird/pyngrok):
@@ -110,6 +144,27 @@ py manage.py start_ngrok
 	- `--port 9000` — expose a different local port.
 	- `--no-inspect` — disable the Ngrok inspector UI if you don’t need request replay.
 - The previous `--write-env` / `MATCHING_CONFIRMATION_BASE_URL` helpers were removed along with messaging, so the command now focuses solely on opening tunnels.
+
+### AWS EC2 deployment (preserve current DB/media/logins/logs)
+
+- Full guide: `DEPLOY_AWS_EC2_SQLITE.md`
+- Prepare local state before sync:
+
+```
+powershell -ExecutionPolicy Bypass -File scripts/aws/prepare_local_state.ps1
+```
+
+- Sync your current DB/media/logs to EC2:
+
+```
+powershell -ExecutionPolicy Bypass -File scripts/aws/sync_state_to_ec2.ps1 -Ec2Host <EC2_PUBLIC_IP> -KeyPath "C:\path\to\key.pem"
+```
+
+- Start on EC2:
+
+```
+docker compose -f docker-compose.aws.sqlite.yml up -d --build
+```
 
 
 ### Donor Geolocation & Map Verification

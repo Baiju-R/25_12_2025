@@ -97,7 +97,22 @@
 					<div class="col-md-6 mb-3">
 						<a href="{% url 'my-request' %}" class="action-btn history"><i class="fas fa-list-alt"></i> My Requests</a>
 					</div>
+					<div class="col-md-12 mb-1">
+						<a href="{% url 'patient-nearby-donors' %}" class="action-btn history"><i class="fas fa-map-marked-alt"></i> Nearby Donor Map</a>
+					</div>
 				</div>
+			</div>
+
+			<div class="quick-actions" style="margin-top:20px;">
+				<h4 style="margin-bottom:12px"><i class="fas fa-shield-alt"></i> Verification Badge</h4>
+				{% if verification_badge %}
+					<div style="background:#f8fafc;border-radius:12px;padding:14px;color:#1f2937;">
+						<strong>{{ verification_badge.badge_name }}</strong> {% if verification_badge.is_verified %}✅{% else %}⏳{% endif %}
+						<div style="margin-top:6px;color:#475569;">Trust score: {{ verification_badge.trust_score }}/100</div>
+					</div>
+				{% else %}
+					<div style="color:#64748b;">No verification badge assigned yet.</div>
+				{% endif %}
 			</div>
 
 			<div class="quick-actions" style="margin-top:20px;">
@@ -125,6 +140,12 @@
 										{% if fb.image1 %}<a href="{{ fb.image1.url }}" target="_blank"><img src="{{ fb.image1.url }}" alt="feedback image 1" style="width:96px;height:78px;border-radius:14px;object-fit:cover;border:1px solid rgba(226,232,240,0.9);"></a>{% endif %}
 										{% if fb.image2 %}<a href="{{ fb.image2.url }}" target="_blank"><img src="{{ fb.image2.url }}" alt="feedback image 2" style="width:96px;height:78px;border-radius:14px;object-fit:cover;border:1px solid rgba(226,232,240,0.9);"></a>{% endif %}
 										{% if fb.image3 %}<a href="{{ fb.image3.url }}" target="_blank"><img src="{{ fb.image3.url }}" alt="feedback image 3" style="width:96px;height:78px;border-radius:14px;object-fit:cover;border:1px solid rgba(226,232,240,0.9);"></a>{% endif %}
+									</div>
+								{% else %}
+									<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+										<img src="{% if fb.feedback_for == 'DONATION' %}{% static 'image/feedback_donation.svg' %}{% elif fb.feedback_for == 'REQUEST' %}{% static 'image/feedback_request.svg' %}{% else %}{% static 'image/feedback_general.svg' %}{% endif %}"
+											 alt="feedback cover image"
+											 style="width:96px;height:78px;border-radius:14px;object-fit:cover;border:1px solid rgba(226,232,240,0.9);">
 									</div>
 								{% endif %}
 

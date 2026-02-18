@@ -11,9 +11,15 @@ import re
 import time
 import unicodedata
 from functools import lru_cache
+from typing import Any, Dict
 
 import boto3
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import (
+    BotoCoreError,
+    ClientError,
+    NoCredentialsError,
+    PartialCredentialsError,
+)
 from botocore.config import Config
 from django.conf import settings
 
@@ -76,6 +82,91 @@ def _get_sns_client():
     return boto3.client("sns", region_name=settings.AWS_SNS_REGION, config=config)
 
 
+def check_sms_provider_health() -> Dict[str, Any]:
+    """Validate AWS SNS readiness with lightweight API calls.
+
+    Returns structured diagnostics so operators can quickly identify
+    configuration/credential issues before attempting real notification sends.
+    """
+
+    enabled = bool(getattr(settings, "AWS_SNS_ENABLED", False))
+    if not enabled:
+        return {
+            "ok": False,
+            "status": "disabled",
+            "reason": "AWS_SNS_ENABLED is false",
+        }
+
+    region = getattr(settings, "AWS_SNS_REGION", "")
+    if not region:
+        return {
+            "ok": False,
+            "status": "misconfigured",
+            "reason": "AWS_SNS_REGION is not configured",
+        }
+
+    try:
+        session = boto3.session.Session()
+        creds = session.get_credentials()
+        if creds is None:
+            return {
+                "ok": False,
+                "status": "credentials-missing",
+                "reason": "No AWS credentials found in environment/profile/role",
+            }
+
+        # Validate caller identity (fastest definitive auth check)
+        sts = session.client("sts", region_name=region)
+        identity = sts.get_caller_identity()
+
+        # Validate SNS API permission without sending SMS.
+        # Some IAM setups grant sns:Publish but not sns:GetSMSAttributes.
+        # In that case, report degraded-but-usable health instead of hard-failing.
+        sns = _get_sns_client()
+        try:
+            sns.get_sms_attributes(attributes=["DefaultSMSType"])
+            return {
+                "ok": True,
+                "status": "healthy",
+                "region": region,
+                "account": identity.get("Account"),
+                "arn": identity.get("Arn"),
+            }
+        except ClientError as exc:
+            code = (exc.response or {}).get("Error", {}).get("Code", "ClientError")
+            if code == "AuthorizationError":
+                return {
+                    "ok": True,
+                    "status": "healthy-limited",
+                    "region": region,
+                    "account": identity.get("Account"),
+                    "arn": identity.get("Arn"),
+                    "warning": "Missing sns:GetSMSAttributes permission; publish may still work.",
+                }
+            raise
+    except (NoCredentialsError, PartialCredentialsError) as exc:
+        return {
+            "ok": False,
+            "status": "credentials-invalid",
+            "reason": str(exc),
+        }
+    except ClientError as exc:
+        code = (exc.response or {}).get("Error", {}).get("Code", "ClientError")
+        message = (exc.response or {}).get("Error", {}).get("Message", str(exc))
+        return {
+            "ok": False,
+            "status": "aws-client-error",
+            "error_code": code,
+            "reason": message,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "status": "unknown-error",
+            "reason": str(exc),
+        }
+
+
 def send_sms(phone: str, message: str):
     """Send a one-off SMS via AWS SNS."""
 
@@ -111,6 +202,29 @@ def send_sms(phone: str, message: str):
             "message_id": response.get("MessageId"),
             "response": response,
         }
-    except (ClientError, BotoCoreError) as exc:
-        logger.error("SNS publish failed to %s: %s", phone, exc)
-        return {"status": "error", "provider": "aws-sns", "message": str(exc)}
+    except (NoCredentialsError, PartialCredentialsError) as exc:
+        logger.error("SNS credentials error while publishing to %s: %s", phone, exc)
+        return {
+            "status": "error",
+            "provider": "aws-sns",
+            "error_code": "CredentialsError",
+            "message": str(exc),
+        }
+    except ClientError as exc:
+        code = (exc.response or {}).get("Error", {}).get("Code", "ClientError")
+        message = (exc.response or {}).get("Error", {}).get("Message", str(exc))
+        logger.error("SNS publish failed to %s [%s]: %s", phone, code, message)
+        return {
+            "status": "error",
+            "provider": "aws-sns",
+            "error_code": code,
+            "message": message,
+        }
+    except BotoCoreError as exc:
+        logger.error("SNS publish transport failure to %s: %s", phone, exc)
+        return {
+            "status": "error",
+            "provider": "aws-sns",
+            "error_code": "BotoCoreError",
+            "message": str(exc),
+        }

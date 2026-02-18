@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 
 from patient import models as pmodels
 from donor import models as dmodels
@@ -138,4 +139,233 @@ class Feedback(models.Model):
 
     def __str__(self):
         return f"{self.author_label} ({self.rating}★)"
+
+
+class ActionAuditLog(models.Model):
+    ACTION_APPROVE_REQUEST = "APPROVE_REQUEST"
+    ACTION_REJECT_REQUEST = "REJECT_REQUEST"
+    ACTION_APPROVE_DONATION = "APPROVE_DONATION"
+    ACTION_REJECT_DONATION = "REJECT_DONATION"
+
+    ENTITY_REQUEST = "REQUEST"
+    ENTITY_DONATION = "DONATION"
+
+    action = models.CharField(
+        max_length=32,
+        choices=[
+            (ACTION_APPROVE_REQUEST, "Approve Request"),
+            (ACTION_REJECT_REQUEST, "Reject Request"),
+            (ACTION_APPROVE_DONATION, "Approve Donation"),
+            (ACTION_REJECT_DONATION, "Reject Donation"),
+        ],
+    )
+    entity_type = models.CharField(
+        max_length=16,
+        choices=[
+            (ENTITY_REQUEST, "Blood Request"),
+            (ENTITY_DONATION, "Blood Donation"),
+        ],
+    )
+    entity_id = models.PositiveIntegerField(db_index=True)
+    bloodgroup = models.CharField(max_length=10, blank=True)
+    units = models.PositiveIntegerField(default=0)
+
+    status_before = models.CharField(max_length=20, blank=True)
+    status_after = models.CharField(max_length=20, blank=True)
+
+    actor = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    actor_role = models.CharField(max_length=80, blank=True)
+    actor_username = models.CharField(max_length=150, blank=True)
+
+    notes = models.CharField(max_length=255, blank=True)
+    payload = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = "Action Audit Log"
+        verbose_name_plural = "Action Audit Logs"
+        permissions = [
+            ("can_review_requests", "Can review and action blood requests"),
+            ("can_review_donations", "Can review and action blood donations"),
+            ("can_view_audit_logs", "Can view action audit logs"),
+            ("can_export_reports", "Can export admin reports"),
+        ]
+
+    def __str__(self):
+        return f"{self.action} {self.entity_type}#{self.entity_id} by {self.actor_username or 'system'}"
+
+
+class ReportExportLog(models.Model):
+    FORMAT_CSV = 'csv'
+    FORMAT_PDF = 'pdf'
+
+    STATUS_SUCCESS = 'SUCCESS'
+    STATUS_FALLBACK = 'FALLBACK'
+    STATUS_FAILED = 'FAILED'
+
+    report_key = models.CharField(max_length=32)
+    export_format = models.CharField(max_length=8, choices=[(FORMAT_CSV, 'CSV'), (FORMAT_PDF, 'PDF')])
+    rows_exported = models.PositiveIntegerField(default=0)
+
+    actor = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    actor_username = models.CharField(max_length=150, blank=True)
+    actor_role = models.CharField(max_length=80, blank=True)
+
+    filters = models.JSONField(null=True, blank=True)
+    status = models.CharField(
+        max_length=16,
+        choices=[
+            (STATUS_SUCCESS, 'Success'),
+            (STATUS_FALLBACK, 'Fallback'),
+            (STATUS_FAILED, 'Failed'),
+        ],
+        default=STATUS_SUCCESS,
+    )
+    error = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        verbose_name = 'Report Export Log'
+        verbose_name_plural = 'Report Export Logs'
+
+    def __str__(self):
+        return f"{self.report_key} ({self.export_format}) by {self.actor_username or 'system'}"
+
+
+class EmergencyBroadcast(models.Model):
+    STATUS_PENDING = 'PENDING'
+    STATUS_SENT = 'SENT'
+    STATUS_PARTIAL = 'PARTIAL'
+    STATUS_FAILED = 'FAILED'
+
+    blood_request = models.ForeignKey(BloodRequest, on_delete=models.CASCADE, related_name='broadcasts')
+    triggered_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    message = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=16,
+        choices=[
+            (STATUS_PENDING, 'Pending'),
+            (STATUS_SENT, 'Sent'),
+            (STATUS_PARTIAL, 'Partially Sent'),
+            (STATUS_FAILED, 'Failed'),
+        ],
+        default=STATUS_PENDING,
+    )
+    total_targets = models.PositiveIntegerField(default=0)
+    total_sent = models.PositiveIntegerField(default=0)
+    total_failed = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f"Broadcast #{self.id} for request #{self.blood_request_id}"
+
+
+class BroadcastDelivery(models.Model):
+    CHANNEL_SMS = 'SMS'
+    CHANNEL_EMAIL = 'EMAIL'
+    CHANNEL_INAPP = 'INAPP'
+
+    STATUS_PENDING = 'PENDING'
+    STATUS_SENT = 'SENT'
+    STATUS_FAILED = 'FAILED'
+
+    broadcast = models.ForeignKey(EmergencyBroadcast, on_delete=models.CASCADE, related_name='deliveries')
+    donor = models.ForeignKey(dmodels.Donor, null=True, blank=True, on_delete=models.CASCADE)
+    channel = models.CharField(max_length=12, choices=[
+        (CHANNEL_SMS, 'SMS'),
+        (CHANNEL_EMAIL, 'Email'),
+        (CHANNEL_INAPP, 'In-App'),
+    ])
+    status = models.CharField(max_length=12, choices=[
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_SENT, 'Sent'),
+        (STATUS_FAILED, 'Failed'),
+    ], default=STATUS_PENDING)
+    destination = models.CharField(max_length=160, blank=True)
+    detail = models.CharField(max_length=255, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-id']
+
+
+class InAppNotification(models.Model):
+    donor = models.ForeignKey(dmodels.Donor, null=True, blank=True, on_delete=models.CASCADE)
+    patient = models.ForeignKey(pmodels.Patient, null=True, blank=True, on_delete=models.CASCADE)
+    title = models.CharField(max_length=120)
+    message = models.TextField()
+    related_request = models.ForeignKey(BloodRequest, null=True, blank=True, on_delete=models.SET_NULL)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+
+
+class DonationAppointmentSlot(models.Model):
+    start_at = models.DateTimeField()
+    end_at = models.DateTimeField()
+    capacity = models.PositiveIntegerField(default=10)
+    is_active = models.BooleanField(default=True)
+    notes = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['start_at', 'id']
+
+    def __str__(self):
+        return f"Slot {self.start_at:%d %b %Y %H:%M}"
+
+
+class DonationAppointment(models.Model):
+    STATUS_PENDING = 'PENDING'
+    STATUS_APPROVED = 'APPROVED'
+    STATUS_RESCHEDULED = 'RESCHEDULED'
+    STATUS_NO_SHOW = 'NO_SHOW'
+    STATUS_COMPLETED = 'COMPLETED'
+    STATUS_CANCELLED = 'CANCELLED'
+
+    donor = models.ForeignKey(dmodels.Donor, on_delete=models.CASCADE)
+    slot = models.ForeignKey(DonationAppointmentSlot, null=True, blank=True, on_delete=models.SET_NULL)
+    requested_for = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=[
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_APPROVED, 'Approved'),
+        (STATUS_RESCHEDULED, 'Rescheduled'),
+        (STATUS_NO_SHOW, 'No Show'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ], default=STATUS_PENDING)
+    notes = models.CharField(max_length=255, blank=True)
+    reminder_sent_at = models.DateTimeField(null=True, blank=True)
+    requested_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-requested_at', '-id']
+
+
+class VerificationBadge(models.Model):
+    badge_name = models.CharField(max_length=60, default='Verified Identity')
+    donor = models.ForeignKey(dmodels.Donor, null=True, blank=True, on_delete=models.CASCADE)
+    patient = models.ForeignKey(pmodels.Patient, null=True, blank=True, on_delete=models.CASCADE)
+    hospital_name = models.CharField(max_length=120, blank=True)
+    is_verified = models.BooleanField(default=False)
+    trust_score = models.PositiveSmallIntegerField(default=50)
+    verified_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['-verified_at', '-id']
+
+    def __str__(self):
+        owner = self.donor.get_name if self.donor_id else (self.patient.get_name if self.patient_id else 'Unknown')
+        return f"{owner} • {self.badge_name}"
 

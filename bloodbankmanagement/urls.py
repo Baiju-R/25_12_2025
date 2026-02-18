@@ -14,9 +14,11 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
+import os
+from django.views.static import serve as static_serve
 from blood import views as blood_views
 from donor import views as donor_views
 from patient import views as patient_views
@@ -37,11 +39,18 @@ urlpatterns = [
     path('admin-donor-map/', blood_views.admin_donor_map_view, name='admin-donor-map'),
     path('admin-patient/', blood_views.admin_patient_view, name='admin-patient'),
     path('admin-request/', blood_views.admin_request_view, name='admin-request'),
+    path('admin-request/<int:pk>/broadcast/', blood_views.emergency_broadcast_view, name='emergency-broadcast'),
     path('admin-request/<int:pk>/recommendations/', blood_views.admin_request_recommendations_view, name='admin-request-recommendations'),
     path('admin-request-history/', blood_views.admin_request_history_view, name='admin-request-history'),
     path('admin-donation/', blood_views.admin_donation_view, name='admin-donation'),
     path('admin-analytics/', blood_views.admin_analytics_view, name='admin-analytics'),
     path('admin-leadership/', blood_views.admin_leadership_view, name='admin-leadership'),
+    path('admin-appointments/', blood_views.admin_appointments_view, name='admin-appointments'),
+    path('admin-appointments/<int:pk>/status/', blood_views.admin_appointment_update_status_view, name='admin-appointment-update-status'),
+    path('admin-verification/', blood_views.admin_verification_view, name='admin-verification'),
+    path('admin-audit-logs/', blood_views.admin_audit_logs_view, name='admin-audit-logs'),
+    path('admin-reports/', blood_views.admin_reports_view, name='admin-reports'),
+    path('admin-reports/export/<str:report_key>/<str:fmt>/', blood_views.admin_reports_export_view, name='admin-reports-export'),
     path('assistant/', blood_views.knowledge_chatbot_view, name='knowledge-chatbot'),
 
     # Feedback URLs
@@ -66,12 +75,19 @@ urlpatterns = [
     path('quick-request-success/<int:request_id>/', blood_views.quick_request_success_view, name='quick-request-success'),
     path('request-blood/', blood_views.request_blood_redirect_view, name='request-blood'),
     path('test-sms/', blood_views.test_sms, name='test-sms'),
+    path('service-worker.js', blood_views.service_worker_js_view, name='service-worker-js'),
 
     # App URLs using include
     path('donor/', include('donor.urls')),
     path('patient/', include('patient.urls')),
 ]
 
-# Serve media files during development
+# Serve media files during development, or explicitly in simple single-container deployments.
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+else:
+    serve_media = os.getenv('SERVE_MEDIA', 'false').lower() == 'true'
+    if serve_media:
+        urlpatterns += [
+            re_path(r'^media/(?P<path>.*)$', static_serve, {'document_root': settings.MEDIA_ROOT}),
+        ]

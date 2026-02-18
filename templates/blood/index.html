@@ -5,11 +5,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#e74c3c">
+    <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
     <title>BloodBridge - Connecting Lives Through Blood Donation</title>
     
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.14.0/css/all.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/responsive-enhancements.css' %}">
     
     <style>
         /* Enhanced Homepage Styles */
@@ -780,7 +783,12 @@
                             <i class="fas fa-medal"></i> #{{ donor.rank }}
                         </div>
                         <div class="champion-avatar">
-                            <img src="{{ donor.profile_pic_url }}" alt="{{ donor.name }} profile" loading="lazy">
+                            <img src="{{ donor.profile_pic_url }}"
+                                 alt="{{ donor.name }} profile"
+                                 loading="lazy"
+                                 data-random-src="{{ donor.random_profile_pic_url }}"
+                                 data-placeholder-src="{{ donor.placeholder_avatar_url }}"
+                                 onerror="if(!this.dataset.fallbackApplied){this.dataset.fallbackApplied='1'; this.src=this.dataset.randomSrc; return;} this.onerror=null; this.src=this.dataset.placeholderSrc;">
                         </div>
                         <h3 class="champion-name">{{ donor.name }}</h3>
                         <div class="champion-pill">
@@ -919,6 +927,12 @@
                                                     {% if fb.image2 %}<a href="{{ fb.image2.url }}" target="_blank"><img class="fb-img" src="{{ fb.image2.url }}" alt="feedback image 2"></a>{% endif %}
                                                     {% if fb.image3 %}<a href="{{ fb.image3.url }}" target="_blank"><img class="fb-img" src="{{ fb.image3.url }}" alt="feedback image 3"></a>{% endif %}
                                                 </div>
+                                            {% else %}
+                                                <div class="fb-images">
+                                                    <img class="fb-img"
+                                                         src="{% if fb.feedback_for == 'DONATION' %}{% static 'image/feedback_donation.svg' %}{% elif fb.feedback_for == 'REQUEST' %}{% static 'image/feedback_request.svg' %}{% else %}{% static 'image/feedback_general.svg' %}{% endif %}"
+                                                         alt="feedback cover image">
+                                                </div>
                                             {% endif %}
 
                                             {% if fb.admin_reply %}
@@ -983,6 +997,12 @@
                 userGroup: userGroup,
                 isAdmin: isAdmin
             });
+
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/service-worker.js').catch(function() {});
+                });
+            }
 
             // Enhanced request blood functionality
             function handleRequestBlood() {

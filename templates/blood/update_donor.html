@@ -60,6 +60,24 @@
                 <div class="row">
                     <div class="col-md-6">
                         <div class="form-group">
+                            <label>Zipcode</label>
+                            {% render_field donorForm.zipcode class="form-control" %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Availability</label>
+                            <div class="form-check">
+                                {% render_field donorForm.is_available class="form-check-input" %}
+                                <label class="form-check-label" for="id_is_available">Available for requests</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
                             <label>Latitude</label>
                             {% render_field donorForm.latitude class="form-control" placeholder="12.971599" %}
                             <small class="form-text text-muted">Required with longitude to place this donor on the map.</small>
@@ -87,6 +105,100 @@
                 <div class="form-group">
                     <label>Profile Picture</label>
                     {% render_field donorForm.profile_pic class="form-control-file" %}
+                </div>
+
+                <h4 class="mt-4">Medical / Eligibility</h4>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Sex</label>
+                            {% render_field donorForm.sex class="form-control" %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Date of Birth</label>
+                            {% render_field donorForm.date_of_birth class="form-control" %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Weight (kg)</label>
+                            {% render_field donorForm.weight_kg class="form-control" %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Hemoglobin (g/dL)</label>
+                            {% render_field donorForm.hemoglobin_g_dl class="form-control" %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>BP Systolic</label>
+                            {% render_field donorForm.blood_pressure_systolic class="form-control" %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>BP Diastolic</label>
+                            {% render_field donorForm.blood_pressure_diastolic class="form-control" %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <div class="form-check">
+                                {% render_field donorForm.has_chronic_disease class="form-check-input" %}
+                                <label class="form-check-label" for="id_has_chronic_disease">Has chronic disease</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Chronic disease details</label>
+                            {% render_field donorForm.chronic_disease_details class="form-control" %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <div class="form-check">
+                                {% render_field donorForm.on_medication class="form-check-input" %}
+                                <label class="form-check-label" for="id_on_medication">On medication</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Medication details</label>
+                            {% render_field donorForm.medication_details class="form-control" %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <div class="form-check">
+                                {% render_field donorForm.smokes class="form-check-input" %}
+                                <label class="form-check-label" for="id_smokes">Smokes</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Last donated at</label>
+                            {% render_field donorForm.last_donated_at class="form-control" %}
+                        </div>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn btn-primary">Update Donor</button>

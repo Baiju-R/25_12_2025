@@ -80,6 +80,12 @@
                                 {% if fb.image2 %}<a href="{{ fb.image2.url }}" target="_blank"><img class="img" src="{{ fb.image2.url }}" alt="feedback image 2"></a>{% endif %}
                                 {% if fb.image3 %}<a href="{{ fb.image3.url }}" target="_blank"><img class="img" src="{{ fb.image3.url }}" alt="feedback image 3"></a>{% endif %}
                             </div>
+                        {% else %}
+                            <div class="imgs">
+                                <img class="img"
+                                     src="{% if fb.feedback_for == 'DONATION' %}{% static 'image/feedback_donation.svg' %}{% elif fb.feedback_for == 'REQUEST' %}{% static 'image/feedback_request.svg' %}{% else %}{% static 'image/feedback_general.svg' %}{% endif %}"
+                                     alt="feedback cover image">
+                            </div>
                         {% endif %}
 
                         {% if fb.admin_reply %}

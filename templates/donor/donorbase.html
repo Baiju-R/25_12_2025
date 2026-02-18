@@ -1,12 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    {% load static %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Donor Portal - BloodBridge</title>
+    <meta name="theme-color" content="#e74c3c">
+    <link rel="manifest" href="/static/manifest.webmanifest">
     
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.14.0/css/all.css">
+    <link rel="stylesheet" href="{% static 'css/responsive-enhancements.css' %}">
+    
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
@@ -349,6 +354,12 @@
                 </a>
             </li>
             <li>
+                <a href="{% url 'donor-appointments' %}" class="{% if request.path == '/donor/appointments/' %}active{% endif %}">
+                    <i class="fas fa-calendar-check"></i>
+                    <span>Appointments</span>
+                </a>
+            </li>
+            <li>
                 <a href="{% url 'donor-feedback' %}" class="{% if request.path == '/donor/feedback/' %}active{% endif %}">
                     <i class="fas fa-comment-dots"></i>
                     <span>Feedback</span>
@@ -403,6 +414,12 @@
                 }
             });
         });
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/service-worker.js').catch(function() {});
+            });
+        }
     </script>
 
     {% include 'blood/faq_button.html' %}

@@ -9,6 +9,7 @@ services:
       - .env
     environment:
       DEBUG: "false"
+      SERVE_MEDIA: "true"
       # Use a persistent path on the VM
       DATABASE_URL: "sqlite:////data/db.sqlite3"
       MIGRATE_ON_STARTUP: "true"

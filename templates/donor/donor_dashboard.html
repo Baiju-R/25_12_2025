@@ -724,7 +724,71 @@
                     <i class="fas fa-list-alt"></i>
                     <span>Track Requests</span>
                 </a>
+                <a href="{% url 'donor-appointments' %}" class="action-btn history">
+                    <i class="fas fa-calendar-check"></i>
+                    <span>Book Appointment</span>
+                </a>
             </div>
+        </div>
+
+        <div class="quick-actions" style="margin-top: 24px;">
+            <h3 class="quick-actions-title"><i class="fas fa-shield-alt"></i> Eligibility & Trust</h3>
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;">
+                <div style="background:rgba(255,255,255,0.95);border-radius:16px;padding:16px;color:#1f2937;">
+                    <div style="font-weight:800;">{{ eligibility.label }}</div>
+                    {% if eligibility.reasons %}
+                        <ul style="margin:10px 0 0;padding-left:18px;">
+                            {% for reason in eligibility.reasons %}<li>{{ reason }}</li>{% endfor %}
+                        </ul>
+                    {% else %}
+                        <div style="margin-top:8px;color:#16a34a;font-weight:700;">You can donate now.</div>
+                    {% endif %}
+                </div>
+                <div style="background:rgba(255,255,255,0.95);border-radius:16px;padding:16px;color:#1f2937;">
+                    <div style="font-weight:800;">Verification Badge</div>
+                    {% if verification_badge %}
+                        <div style="margin-top:8px;">{{ verification_badge.badge_name }} {% if verification_badge.is_verified %}✅{% else %}⏳{% endif %}</div>
+                        <div style="font-size:0.95rem;color:#475569;">Trust score: {{ verification_badge.trust_score }}/100</div>
+                    {% else %}
+                        <div style="margin-top:8px;color:#64748b;">No badge assigned yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="quick-actions" style="margin-top: 24px;">
+            <h3 class="quick-actions-title"><i class="fas fa-trophy"></i> Gamification</h3>
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;">
+                <div style="background:rgba(255,255,255,0.95);border-radius:14px;padding:14px;color:#1f2937;"><strong>{{ donation_streak }}</strong><br>Donation streak</div>
+                <div style="background:rgba(255,255,255,0.95);border-radius:14px;padding:14px;color:#1f2937;"><strong>{{ lives_helped }}</strong><br>Lives helped</div>
+                <div style="background:rgba(255,255,255,0.95);border-radius:14px;padding:14px;color:#1f2937;"><strong>{% if next_milestone %}{{ next_milestone }}{% else %}✔{% endif %}</strong><br>Next milestone</div>
+                <div style="background:rgba(255,255,255,0.95);border-radius:14px;padding:14px;color:#1f2937;"><strong>{{ donor.zipcode|default:'-' }}</strong><br>Your city code</div>
+            </div>
+            {% if city_leaders %}
+                <div style="margin-top:12px;background:rgba(255,255,255,0.95);border-radius:14px;padding:14px;color:#1f2937;">
+                    <strong>Top City Leaderboard</strong>
+                    <div style="margin-top:8px;display:flex;gap:10px;flex-wrap:wrap;">
+                        {% for c in city_leaders %}<span class="badge badge-light">{{ c.zipcode }} • {{ c.total_units|default:0 }} ml</span>{% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="quick-actions" style="margin-top: 24px;">
+            <h3 class="quick-actions-title"><i class="fas fa-bell"></i> Notifications</h3>
+            {% if notifications %}
+                <div style="display:grid;gap:10px;">
+                    {% for note in notifications %}
+                        <div style="background:rgba(255,255,255,0.95);border-radius:14px;padding:12px;color:#1f2937;">
+                            <strong>{{ note.title }}</strong>
+                            <div>{{ note.message }}</div>
+                            <small style="color:#64748b;">{{ note.created_at|date:"d M Y H:i" }}</small>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div style="background:rgba(255,255,255,0.95);border-radius:14px;padding:12px;color:#64748b;">No notifications yet.</div>
+            {% endif %}
         </div>
 
         <div class="quick-actions" style="margin-top: 30px;">
@@ -757,6 +821,12 @@
                                     {% if fb.image1 %}<a href="{{ fb.image1.url }}" target="_blank"><img src="{{ fb.image1.url }}" alt="feedback image 1" style="width:96px;height:78px;border-radius:14px;object-fit:cover;border:1px solid rgba(226,232,240,0.9);"></a>{% endif %}
                                     {% if fb.image2 %}<a href="{{ fb.image2.url }}" target="_blank"><img src="{{ fb.image2.url }}" alt="feedback image 2" style="width:96px;height:78px;border-radius:14px;object-fit:cover;border:1px solid rgba(226,232,240,0.9);"></a>{% endif %}
                                     {% if fb.image3 %}<a href="{{ fb.image3.url }}" target="_blank"><img src="{{ fb.image3.url }}" alt="feedback image 3" style="width:96px;height:78px;border-radius:14px;object-fit:cover;border:1px solid rgba(226,232,240,0.9);"></a>{% endif %}
+                                </div>
+                            {% else %}
+                                <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+                                    <img src="{% if fb.feedback_for == 'DONATION' %}{% static 'image/feedback_donation.svg' %}{% elif fb.feedback_for == 'REQUEST' %}{% static 'image/feedback_request.svg' %}{% else %}{% static 'image/feedback_general.svg' %}{% endif %}"
+                                         alt="feedback cover image"
+                                         style="width:96px;height:78px;border-radius:14px;object-fit:cover;border:1px solid rgba(226,232,240,0.9);">
                                 </div>
                             {% endif %}
 

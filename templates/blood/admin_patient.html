@@ -58,44 +58,115 @@
         border-radius: 2px;
     }
     
-    .enhanced-table {
-        border-radius: 15px;
+    .cards-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 20px;
+    }
+
+    .id-card {
+        background: linear-gradient(160deg, #ffffff 0%, #f8f9ff 100%);
+        border: 2px solid #e9ecf7;
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 10px 24px rgba(52, 73, 94, 0.12);
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        position: relative;
         overflow: hidden;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-        border: none !important;
     }
-    
-    .enhanced-table thead th {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+
+    .id-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 8px;
+    }
+
+    .id-card.card-variant-a::before {
+        background: linear-gradient(90deg, #667eea, #5a67d8);
+    }
+
+    .id-card.card-variant-b::before {
+        background: linear-gradient(90deg, #764ba2, #8e44ad);
+    }
+
+    .id-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 14px 32px rgba(52, 73, 94, 0.18);
+    }
+
+    .id-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .id-card-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 8px;
+    }
+
+    .id-chip {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        color: #3f4a5f;
+        background: #eef1fb;
+        border: 1px solid #d4dcf3;
+        border-radius: 999px;
+        padding: 4px 10px;
+    }
+
+    .id-card-profile {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    .id-card-body {
+        background: #f7f8fc;
+        border-radius: 12px;
+        padding: 12px;
+        border-left: 4px solid #667eea;
+    }
+
+    .id-field {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+        padding-bottom: 8px;
+        border-bottom: 1px dashed #dbe2f3;
+        font-size: 0.95rem;
+    }
+
+    .id-field:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+    }
+
+    .id-label {
+        color: #5f6f86;
         font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        padding: 15px 12px;
-        border: none;
-        font-size: 0.9rem;
+        white-space: nowrap;
     }
-    
-    .enhanced-table tbody tr {
-        transition: all 0.3s ease;
-        border: none;
-    }
-    
-    .enhanced-table tbody tr:hover {
-        background-color: #f8f9fa;
-        transform: scale(1.01);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-    }
-    
-    .enhanced-table tbody td {
-        padding: 15px 12px;
-        vertical-align: middle;
-        border: 1px solid #ecf0f1;
-        font-weight: 500;
-    }
-    
-    .enhanced-table tbody tr:nth-child(even) {
-        background-color: #f8f9fa;
+
+    .id-value {
+        color: #2c3e50;
+        font-weight: 600;
+        text-align: right;
+        word-break: break-word;
     }
     
     .profile-image {
@@ -198,8 +269,13 @@
     .action-buttons {
         display: flex;
         gap: 5px;
-        justify-content: center;
+        justify-content: flex-end;
         flex-wrap: wrap;
+    }
+
+    .id-card-footer {
+        border-top: 1px solid #e4e9f7;
+        padding-top: 10px;
     }
     
     .profile-placeholder {
@@ -220,20 +296,25 @@
         transform: scale(1.1);
         box-shadow: 0 4px 15px rgba(189, 195, 199, 0.3);
     }
+
+    .empty-state {
+        text-align: center;
+        padding: 30px 15px;
+        border: 2px dashed #d8deef;
+        border-radius: 14px;
+        color: #5f6f86;
+        font-weight: 600;
+    }
     
     /* Responsive adjustments */
     @media (max-width: 768px) {
         .table-container {
             padding: 20px 15px;
         }
-        
-        .enhanced-table {
-            font-size: 0.85rem;
-        }
-        
-        .enhanced-table thead th,
-        .enhanced-table tbody td {
-            padding: 10px 8px;
+
+        .cards-grid {
+            grid-template-columns: 1fr;
+            gap: 14px;
         }
         
         .action-btn {
@@ -248,8 +329,18 @@
         }
         
         .action-buttons {
+            flex-direction: row;
+            gap: 2px;
+            justify-content: flex-start;
+        }
+
+        .id-field {
             flex-direction: column;
             gap: 2px;
+        }
+
+        .id-value {
+            text-align: left;
         }
     }
 </style>
@@ -266,60 +357,72 @@
                 <i class="fas fa-procedures"></i> Patient Details
             </h4>
             
-            <div class="table-responsive">
-                <table class="table enhanced-table">
-                    <thead>
-                        <tr>
-                            <th scope="col"><i class="fas fa-user"></i> Name</th>
-                            <th scope="col"><i class="fas fa-image"></i> Profile</th>
-                            <th scope="col"><i class="fas fa-tint"></i> Blood Group</th>
-                            <th scope="col"><i class="fas fa-calendar-alt"></i> Age</th>
-                            <th scope="col"><i class="fas fa-stethoscope"></i> Disease</th>
-                            <th scope="col"><i class="fas fa-phone"></i> Mobile</th>
-                            <th scope="col"><i class="fas fa-cogs"></i> Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for t in patients %}
-                        <tr>
-                            <td class="patient-name">{{t.get_name}}</td>
-                            <td>
+            {% if patients %}
+                <div class="cards-grid">
+                    {% for t in patients %}
+                    <div class="id-card {% if forloop.counter0|divisibleby:2 %}card-variant-a{% else %}card-variant-b{% endif %}">
+                        <div class="id-card-header">
+                            <div class="id-card-profile">
                                 {% if t.profile_pic %}
-                                    <img src="{{ t.profile_pic.url }}" 
-                                         alt="Profile Pic" 
+                                    <img src="{{ t.profile_pic.url }}"
+                                         alt="Profile Pic"
                                          class="profile-image"
                                          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
                                     <div class="profile-placeholder" style="display: none;">
                                         <i class="fas fa-user-circle"></i>
                                     </div>
                                 {% else %}
-                                    <div class="profile-placeholder">
+                                    <img src="https://i.pravatar.cc/150?u=patient-{{t.id}}"
+                                         alt="Random Patient Avatar"
+                                         class="profile-image"
+                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                                    <div class="profile-placeholder" style="display: none;">
                                         <i class="fas fa-user-circle"></i>
                                     </div>
                                 {% endif %}
-                            </td>
-                            <td><span class="blood-group-badge">{{t.bloodgroup}}</span></td>
-                            <td class="age-display">{{t.age}} years</td>
-                            <td class="disease-display">{{t.disease}}</td>
-                            <td class="mobile-display">{{t.mobile}}</td>
-                            <td>
-                                <div class="action-buttons">
-                                    <a class="btn action-btn btn-edit" href="{% url 'update-patient' t.id %}">
-                                        <i class="fas fa-edit"></i> Edit
-                                    </a>
-                                    <form method="post" action="{% url 'delete-patient' t.id %}" style="display:inline;">
-                                        {% csrf_token %}
-                                        <button class="btn action-btn btn-delete" type="submit" onclick="return confirm('Delete this patient? This cannot be undone.');">
-                                            <i class="fas fa-trash"></i> Delete
-                                        </button>
-                                    </form>
+                                <div>
+                                    <div class="patient-name">{{t.get_name}}</div>
+                                    <span class="blood-group-badge">{{t.bloodgroup}}</span>
                                 </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                            </div>
+                            <div class="id-card-meta">
+                                <span class="id-chip">PATIENT ID #{{t.id}}</span>
+                                <div class="age-display">{{t.age}} years</div>
+                            </div>
+                        </div>
+
+                        <div class="id-card-body">
+                            <div class="id-field">
+                                <span class="id-label"><i class="fas fa-stethoscope"></i> Disease</span>
+                                <span class="id-value disease-display">{{t.disease}}</span>
+                            </div>
+                            <div class="id-field">
+                                <span class="id-label"><i class="fas fa-phone"></i> Mobile</span>
+                                <span class="id-value mobile-display">{{t.mobile}}</span>
+                            </div>
+                        </div>
+
+                        <div class="id-card-footer">
+                            <div class="action-buttons">
+                                <a class="btn action-btn btn-edit" href="{% url 'update-patient' t.id %}">
+                                    <i class="fas fa-edit"></i> Edit
+                                </a>
+                                <form method="post" action="{% url 'delete-patient' t.id %}" style="display:inline;">
+                                    {% csrf_token %}
+                                    <button class="btn action-btn btn-delete" type="submit" onclick="return confirm('Delete this patient? This cannot be undone.');">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-user-slash"></i> No patients found.
+                </div>
+            {% endif %}
         </div>
     </div>
 </div>

@@ -1,5 +1,7 @@
 import json
 import logging
+import csv
+import io
 from collections import defaultdict, OrderedDict
 from copy import deepcopy
 from datetime import date, timedelta, datetime
@@ -19,6 +21,7 @@ from django.http import HttpResponseRedirect, Http404, HttpResponse, JsonRespons
 from django.shortcuts import render, redirect, get_object_or_404
 from django.templatetags.static import static
 from django.utils import timezone
+from django.template.loader import render_to_string
 
 try:
     import folium  # type: ignore
@@ -38,6 +41,212 @@ from patient import models as pmodels
 from .services.donor_recommender import recommend_donors_for_request
 
 logger = logging.getLogger(__name__)
+
+try:
+    from reportlab.lib import colors  # type: ignore
+    from reportlab.lib.pagesizes import A4  # type: ignore
+    from reportlab.lib.units import mm  # type: ignore
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer  # type: ignore
+    from reportlab.lib.styles import getSampleStyleSheet  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    colors = None
+    A4 = None
+    mm = None
+    SimpleDocTemplate = None
+    Table = None
+    TableStyle = None
+    Paragraph = None
+    Spacer = None
+    getSampleStyleSheet = None
+
+
+def _has_role_permission(user, permission_codename: str) -> bool:
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    if user.has_perm(f"blood.{permission_codename}"):
+        return True
+    return user.groups.filter(name="ADMIN_OPS").exists()
+
+
+def _actor_role_label(user) -> str:
+    if not getattr(user, 'is_authenticated', False):
+        return 'ANONYMOUS'
+    if user.is_superuser:
+        return 'SUPERUSER'
+    groups = list(user.groups.values_list('name', flat=True))
+    return ', '.join(groups) if groups else 'STAFF'
+
+
+def _create_action_audit(
+    *,
+    action: str,
+    entity_type: str,
+    entity_id: int,
+    bloodgroup: str = '',
+    units: int = 0,
+    status_before: str = '',
+    status_after: str = '',
+    actor=None,
+    notes: str = '',
+    payload: dict | None = None,
+) -> None:
+    try:
+        models.ActionAuditLog.objects.create(
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            bloodgroup=bloodgroup or '',
+            units=int(units or 0),
+            status_before=status_before or '',
+            status_after=status_after or '',
+            actor=actor if getattr(actor, 'is_authenticated', False) else None,
+            actor_role=_actor_role_label(actor),
+            actor_username=getattr(actor, 'username', '') or '',
+            notes=(notes or '')[:255],
+            payload=payload or {},
+        )
+    except Exception as exc:  # pragma: no cover - non-blocking
+        logger.error("Failed to write action audit log: %s", exc)
+
+
+def _create_inapp_notification_safe(*, donor=None, patient=None, title: str, message: str, related_request=None) -> None:
+    try:
+        models.InAppNotification.objects.create(
+            donor=donor,
+            patient=patient,
+            title=(title or '')[:120],
+            message=message or '',
+            related_request=related_request,
+        )
+    except Exception as exc:  # pragma: no cover - non-blocking
+        logger.error("Failed to create in-app notification: %s", exc)
+
+
+def _notify_request_owner_inapp(blood_request, title: str, message: str) -> None:
+    if getattr(blood_request, 'patient_id', None):
+        _create_inapp_notification_safe(
+            patient=blood_request.patient,
+            title=title,
+            message=message,
+            related_request=blood_request,
+        )
+    elif getattr(blood_request, 'request_by_donor_id', None):
+        _create_inapp_notification_safe(
+            donor=blood_request.request_by_donor,
+            title=title,
+            message=message,
+            related_request=blood_request,
+        )
+
+
+def _build_csv_response(filename: str, headers: list[str], rows: list[list]) -> HttpResponse:
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    writer = csv.writer(response)
+    writer.writerow(headers)
+    for row in rows:
+        writer.writerow(row)
+    return response
+
+
+def _build_pdf_response(title: str, headers: list[str], rows: list[list], filename: str) -> HttpResponse | None:
+    if not SimpleDocTemplate:
+        return None
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=14 * mm, leftMargin=14 * mm, topMargin=14 * mm, bottomMargin=14 * mm)
+    styles = getSampleStyleSheet()
+    content = [Paragraph(title, styles['Title']), Spacer(1, 8)]
+
+    table_data = [headers] + rows
+    table = Table(table_data, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4f46e5')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#cbd5e1')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+
+    content.append(table)
+    doc.build(content)
+    pdf = buffer.getvalue()
+    buffer.close()
+
+    response = HttpResponse(pdf, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _backfill_audit_logs_from_existing_data() -> int:
+    if models.ActionAuditLog.objects.exists():
+        return 0
+
+    logs = []
+
+    processed_requests = models.BloodRequest.objects.exclude(status='Pending').order_by('id')
+    for req in processed_requests:
+        if req.status == 'Approved':
+            action = models.ActionAuditLog.ACTION_APPROVE_REQUEST
+        elif req.status == 'Rejected':
+            action = models.ActionAuditLog.ACTION_REJECT_REQUEST
+        else:
+            continue
+
+        logs.append(models.ActionAuditLog(
+            action=action,
+            entity_type=models.ActionAuditLog.ENTITY_REQUEST,
+            entity_id=req.id,
+            bloodgroup=req.bloodgroup or '',
+            units=int(req.unit or 0),
+            status_before='Pending',
+            status_after=req.status,
+            actor=None,
+            actor_role='SYSTEM_BACKFILL',
+            actor_username='system',
+            notes='Backfilled from historical request record.',
+            payload={
+                'backfilled': True,
+                'patient_name': req.patient_name,
+                'source_date': str(req.date),
+            },
+        ))
+
+    processed_donations = dmodels.BloodDonate.objects.exclude(status='Pending').order_by('id')
+    for donation in processed_donations:
+        if donation.status == 'Approved':
+            action = models.ActionAuditLog.ACTION_APPROVE_DONATION
+        elif donation.status == 'Rejected':
+            action = models.ActionAuditLog.ACTION_REJECT_DONATION
+        else:
+            continue
+
+        logs.append(models.ActionAuditLog(
+            action=action,
+            entity_type=models.ActionAuditLog.ENTITY_DONATION,
+            entity_id=donation.id,
+            bloodgroup=donation.bloodgroup or '',
+            units=int(donation.unit or 0),
+            status_before='Pending',
+            status_after=donation.status,
+            actor=None,
+            actor_role='SYSTEM_BACKFILL',
+            actor_username='system',
+            notes='Backfilled from historical donation record.',
+            payload={
+                'backfilled': True,
+                'donor_id': donation.donor_id,
+                'source_date': str(donation.date),
+            },
+        ))
+
+    if logs:
+        models.ActionAuditLog.objects.bulk_create(logs, batch_size=500)
+    return len(logs)
 
 
 CHATBOT_FAQ = [
@@ -495,14 +704,18 @@ def home_view(request):
         donor = donor_map.get(entry['donor_id'])
         if not donor:
             continue
+        random_avatar_url = f"https://i.pravatar.cc/150?u=donor-{donor.id}"
         top_donor_spotlight.append({
             'rank': rank,
+            'id': donor.id,
             'name': donor.get_name,
             'bloodgroup': donor.bloodgroup,
             'total_units': int(entry['total_units'] or 0),
             'donation_count': entry['donation_count'] or 0,
             'last_donation': entry['last_donation'],
-            'profile_pic_url': donor.profile_pic.url if donor.has_profile_pic else placeholder_avatar,
+            'profile_pic_url': donor.profile_pic.url if donor.has_profile_pic else random_avatar_url,
+            'random_profile_pic_url': random_avatar_url,
+            'placeholder_avatar_url': placeholder_avatar,
         })
 
     # Homepage shows a small slideshow subset; full list is available at /feedback/all/.
@@ -1002,16 +1215,15 @@ def update_donor_view(request, pk):
     user = donor.user
     if request.method == 'POST':
         userForm = dforms.DonorUserUpdateForm(request.POST, instance=user)
-        donorForm = dforms.DonorForm(request.POST, request.FILES, instance=donor)
+        donorForm = dforms.DonorAdminUpdateForm(request.POST, request.FILES, instance=donor)
         if userForm.is_valid() and donorForm.is_valid():
             try:
                 with transaction.atomic():
-                    coords_were_mismatched = (donor.latitude is None) != (donor.longitude is None)
                     userForm.save()
                     donorForm.save()
                 messages.success(request, 'Donor profile updated successfully.')
-                if coords_were_mismatched:
-                    messages.warning(request, 'This donor had incomplete coordinates (only latitude or longitude). Coordinates were cleared during save; you can re-add both to pin on the map.')
+                if getattr(donorForm, 'coords_cleared', False):
+                    messages.warning(request, 'Latitude/longitude were incomplete, so both were cleared during save. Add both values to pin this donor on the map.')
                 return redirect('admin-donor')
             except Exception as exc:
                 logger.exception("Failed to update donor %s", donor.id)
@@ -1020,7 +1232,7 @@ def update_donor_view(request, pk):
             messages.error(request, 'Please correct the highlighted errors and try again.')
     else:
         userForm = dforms.DonorUserUpdateForm(instance=user)
-        donorForm = dforms.DonorForm(instance=donor)
+        donorForm = dforms.DonorAdminUpdateForm(instance=donor)
     mydict = {'userForm': userForm, 'donorForm': donorForm}
     return render(request, 'blood/update_donor.html', context=mydict)
 
@@ -1093,7 +1305,7 @@ def delete_patient_view(request, pk):
 
 @login_required
 def admin_request_view(request):
-    if not request.user.is_superuser:
+    if not _has_role_permission(request.user, 'can_review_requests'):
         return redirect('adminlogin')
     
     # Get all pending requests with proper ordering and patient info
@@ -1113,9 +1325,311 @@ def admin_request_view(request):
     
     return render(request, 'blood/admin_request.html', context)
 
+
+@login_required
+@require_POST
+def emergency_broadcast_view(request, pk):
+    if not _has_role_permission(request.user, 'can_review_requests'):
+        return redirect('adminlogin')
+
+    blood_request = get_object_or_404(models.BloodRequest.objects.select_related('patient', 'request_by_donor'), id=pk)
+    if blood_request.status != 'Pending':
+        messages.warning(request, 'Broadcast can only be sent for pending requests.')
+        return redirect('admin-request')
+
+    custom_message = (request.POST.get('message') or '').strip()
+    zipcode = (blood_request.request_zipcode or '').strip()
+
+    donor_qs = dmodels.Donor.objects.filter(
+        bloodgroup=blood_request.bloodgroup,
+        is_available=True,
+        user__is_active=True,
+    ).select_related('user')
+    if zipcode:
+        donor_qs = donor_qs.filter(zipcode=zipcode)
+
+    donors = list(donor_qs[:80])
+    if not donors:
+        messages.error(request, 'No matching available donors found for emergency broadcast.')
+        return redirect('admin-request')
+
+    body = custom_message or (
+        f"Emergency blood request: {blood_request.unit}ml {blood_request.bloodgroup} for {blood_request.patient_name}. "
+        f"Please contact the blood bank immediately if you can donate."
+    )
+
+    broadcast = models.EmergencyBroadcast.objects.create(
+        blood_request=blood_request,
+        triggered_by=request.user,
+        message=body,
+        status=models.EmergencyBroadcast.STATUS_PENDING,
+    )
+
+    sms_sent = 0
+    sms_failed = 0
+    deliveries = []
+    now_value = timezone.now()
+
+    for donor in donors:
+        normalized = normalize_phone_number(donor.mobile)
+        status = models.BroadcastDelivery.STATUS_FAILED
+        detail = 'Missing or invalid phone number'
+        if normalized:
+            try:
+                send_sms(normalized, body)
+                status = models.BroadcastDelivery.STATUS_SENT
+                detail = 'SMS delivered via configured provider'
+                sms_sent += 1
+            except Exception as exc:  # pragma: no cover - network/provider failures
+                detail = str(exc)[:255]
+                sms_failed += 1
+        else:
+            sms_failed += 1
+
+        deliveries.append(models.BroadcastDelivery(
+            broadcast=broadcast,
+            donor=donor,
+            channel=models.BroadcastDelivery.CHANNEL_SMS,
+            status=status,
+            destination=normalized or donor.mobile or '',
+            detail=detail,
+            delivered_at=now_value if status == models.BroadcastDelivery.STATUS_SENT else None,
+        ))
+
+        models.InAppNotification.objects.create(
+            donor=donor,
+            title='Emergency Blood Request',
+            message=body,
+            related_request=blood_request,
+        )
+
+    if deliveries:
+        models.BroadcastDelivery.objects.bulk_create(deliveries, batch_size=200)
+
+    broadcast.total_targets = len(donors)
+    broadcast.total_sent = sms_sent
+    broadcast.total_failed = sms_failed
+    if sms_sent and not sms_failed:
+        broadcast.status = models.EmergencyBroadcast.STATUS_SENT
+    elif sms_sent and sms_failed:
+        broadcast.status = models.EmergencyBroadcast.STATUS_PARTIAL
+    else:
+        broadcast.status = models.EmergencyBroadcast.STATUS_FAILED
+    broadcast.save(update_fields=['total_targets', 'total_sent', 'total_failed', 'status'])
+
+    messages.success(
+        request,
+        f'Emergency broadcast sent to {broadcast.total_targets} donors '
+        f'({broadcast.total_sent} delivered, {broadcast.total_failed} failed).'
+    )
+    return redirect('admin-request')
+
+
+@login_required
+def admin_appointments_view(request):
+    if not request.user.is_superuser:
+        return redirect('adminlogin')
+
+    if request.method == 'POST' and request.POST.get('intent') == 'create_slot':
+        start_raw = (request.POST.get('start_at') or '').strip()
+        end_raw = (request.POST.get('end_at') or '').strip()
+        capacity_raw = (request.POST.get('capacity') or '10').strip()
+        notes = (request.POST.get('notes') or '').strip()
+        try:
+            start_at = datetime.fromisoformat(start_raw)
+            end_at = datetime.fromisoformat(end_raw)
+            if timezone.is_naive(start_at):
+                start_at = timezone.make_aware(start_at)
+            if timezone.is_naive(end_at):
+                end_at = timezone.make_aware(end_at)
+            capacity = max(1, int(capacity_raw))
+        except Exception:
+            messages.error(request, 'Invalid slot input. Please use valid date/time values.')
+            return redirect('admin-appointments')
+
+        if end_at <= start_at:
+            messages.error(request, 'End time must be after start time.')
+            return redirect('admin-appointments')
+
+        models.DonationAppointmentSlot.objects.create(
+            start_at=start_at,
+            end_at=end_at,
+            capacity=capacity,
+            notes=notes,
+            created_by=request.user,
+        )
+        messages.success(request, 'Appointment slot created successfully.')
+        return redirect('admin-appointments')
+
+    slots = models.DonationAppointmentSlot.objects.all().order_by('start_at')[:40]
+    appointments_qs = (
+        models.DonationAppointment.objects.select_related('donor__user', 'slot')
+        .order_by('-requested_at')
+    )
+    pending_count = appointments_qs.filter(status=models.DonationAppointment.STATUS_PENDING).count()
+    appointments = appointments_qs[:120]
+    context = {
+        'slots': slots,
+        'appointments': appointments,
+        'pending_count': pending_count,
+        'status_choices': [
+            models.DonationAppointment.STATUS_APPROVED,
+            models.DonationAppointment.STATUS_RESCHEDULED,
+            models.DonationAppointment.STATUS_NO_SHOW,
+            models.DonationAppointment.STATUS_COMPLETED,
+            models.DonationAppointment.STATUS_CANCELLED,
+        ],
+    }
+    return render(request, 'blood/admin_appointments.html', context)
+
+
+@login_required
+@require_POST
+def admin_appointment_update_status_view(request, pk):
+    if not request.user.is_superuser:
+        return redirect('adminlogin')
+
+    appointment = get_object_or_404(models.DonationAppointment.objects.select_related('donor'), id=pk)
+    new_status = (request.POST.get('status') or '').strip().upper()
+    allowed = {
+        models.DonationAppointment.STATUS_APPROVED,
+        models.DonationAppointment.STATUS_RESCHEDULED,
+        models.DonationAppointment.STATUS_NO_SHOW,
+        models.DonationAppointment.STATUS_COMPLETED,
+        models.DonationAppointment.STATUS_CANCELLED,
+    }
+    if new_status not in allowed:
+        messages.error(request, 'Invalid appointment status.')
+        return redirect('admin-appointments')
+
+    appointment.status = new_status
+    appointment.notes = (request.POST.get('notes') or appointment.notes or '')[:255]
+    slot_id = (request.POST.get('slot_id') or '').strip()
+    if slot_id.isdigit():
+        slot = models.DonationAppointmentSlot.objects.filter(id=int(slot_id), is_active=True).first()
+        if slot:
+            reserving_statuses = {
+                models.DonationAppointment.STATUS_PENDING,
+                models.DonationAppointment.STATUS_APPROVED,
+                models.DonationAppointment.STATUS_RESCHEDULED,
+            }
+            booked_count = models.DonationAppointment.objects.filter(
+                slot=slot,
+                status__in=reserving_statuses,
+            ).exclude(id=appointment.id).count()
+            if booked_count >= int(slot.capacity or 0):
+                messages.error(request, 'Selected slot is full. Please choose another slot.')
+                return redirect('admin-appointments')
+            appointment.slot = slot
+            appointment.requested_for = slot.start_at
+    appointment.save(update_fields=['status', 'notes', 'slot', 'requested_for'])
+
+    if new_status == models.DonationAppointment.STATUS_COMPLETED:
+        donor = appointment.donor
+        donor.last_donated_at = timezone.now().date()
+        donor.save(update_fields=['last_donated_at'])
+
+    models.InAppNotification.objects.create(
+        donor=appointment.donor,
+        title='Appointment Update',
+        message=f'Your donation appointment status is now {new_status}.',
+    )
+
+    messages.success(request, 'Appointment updated.')
+    return redirect('admin-appointments')
+
+
+@login_required
+def admin_verification_view(request):
+    if not request.user.is_superuser:
+        return redirect('adminlogin')
+
+    if request.method == 'POST':
+        entity = (request.POST.get('entity') or '').strip().lower()
+        object_id = (request.POST.get('object_id') or '').strip()
+        if not object_id.isdigit():
+            messages.error(request, 'Invalid record selected for verification update.')
+            return redirect('admin-verification')
+
+        badge_name = (request.POST.get('badge_name') or 'Verified Identity').strip()[:60]
+        hospital_name = (request.POST.get('hospital_name') or '').strip()[:120]
+        notes = (request.POST.get('notes') or '').strip()[:255]
+        trust_raw = (request.POST.get('trust_score') or '50').strip()
+        is_verified = request.POST.get('is_verified') == 'on'
+        try:
+            trust_score = max(0, min(100, int(trust_raw)))
+        except ValueError:
+            trust_score = 50
+
+        defaults = {
+            'badge_name': badge_name,
+            'hospital_name': hospital_name,
+            'notes': notes,
+            'trust_score': trust_score,
+            'is_verified': is_verified,
+            'verified_by': request.user,
+            'verified_at': timezone.now() if is_verified else None,
+        }
+
+        if entity == 'donor':
+            donor = dmodels.Donor.objects.filter(id=int(object_id)).first()
+            if not donor:
+                messages.error(request, 'Donor not found.')
+                return redirect('admin-verification')
+            models.VerificationBadge.objects.update_or_create(donor=donor, patient=None, defaults=defaults)
+            _create_inapp_notification_safe(
+                donor=donor,
+                title='Verification Badge Updated',
+                message=(
+                    f'Your verification badge "{badge_name}" was updated. '
+                    f'Status: {"Verified" if is_verified else "Pending"}. '
+                    f'Trust score: {trust_score}.'
+                ),
+            )
+            messages.success(request, f'Updated donor verification badge for {donor.get_name}.')
+        elif entity == 'patient':
+            patient = pmodels.Patient.objects.filter(id=int(object_id)).first()
+            if not patient:
+                messages.error(request, 'Patient not found.')
+                return redirect('admin-verification')
+            models.VerificationBadge.objects.update_or_create(patient=patient, donor=None, defaults=defaults)
+            _create_inapp_notification_safe(
+                patient=patient,
+                title='Verification Badge Updated',
+                message=(
+                    f'Your verification badge "{badge_name}" was updated. '
+                    f'Status: {"Verified" if is_verified else "Pending"}. '
+                    f'Trust score: {trust_score}.'
+                ),
+            )
+            messages.success(request, f'Updated patient verification badge for {patient.get_name}.')
+        else:
+            messages.error(request, 'Unknown verification entity.')
+
+        return redirect('admin-verification')
+
+    donor_badges = (
+        models.VerificationBadge.objects.filter(donor__isnull=False)
+        .select_related('donor__user', 'verified_by')
+        .order_by('-verified_at', '-id')[:80]
+    )
+    patient_badges = (
+        models.VerificationBadge.objects.filter(patient__isnull=False)
+        .select_related('patient__user', 'verified_by')
+        .order_by('-verified_at', '-id')[:80]
+    )
+
+    context = {
+        'donors': dmodels.Donor.objects.select_related('user').order_by('user__first_name')[:120],
+        'patients': pmodels.Patient.objects.select_related('user').order_by('user__first_name')[:120],
+        'donor_badges': donor_badges,
+        'patient_badges': patient_badges,
+    }
+    return render(request, 'blood/admin_verification.html', context)
+
 @login_required
 def admin_request_history_view(request):
-    if not request.user.is_superuser:
+    if not _has_role_permission(request.user, 'can_review_requests'):
         return redirect('adminlogin')
     
     # Get all processed requests (Approved or Rejected) with related data
@@ -1210,7 +1724,7 @@ def _store_approval_sms_diagnostics(blood_request: models.BloodRequest, result: 
 @login_required
 @require_POST
 def update_approve_status_view(request, pk):
-    if not request.user.is_superuser:
+    if not _has_role_permission(request.user, 'can_review_requests'):
         return redirect('adminlogin')
     
     try:
@@ -1220,6 +1734,17 @@ def update_approve_status_view(request, pk):
             # Check if already processed
             if blood_request.status != 'Pending':
                 messages.warning(request, f'This request has already been {blood_request.status.lower()}.')
+                _create_action_audit(
+                    action=models.ActionAuditLog.ACTION_APPROVE_REQUEST,
+                    entity_type=models.ActionAuditLog.ENTITY_REQUEST,
+                    entity_id=blood_request.id,
+                    bloodgroup=blood_request.bloodgroup,
+                    units=blood_request.unit,
+                    status_before=blood_request.status,
+                    status_after=blood_request.status,
+                    actor=request.user,
+                    notes='Approve skipped because request already processed.',
+                )
                 return redirect('admin-request')
 
             # Get request details
@@ -1241,6 +1766,32 @@ def update_approve_status_view(request, pk):
 
                 blood_request.status = "Approved"
                 blood_request.save(update_fields=['status'])
+
+                _notify_request_owner_inapp(
+                    blood_request,
+                    title='Blood Request Approved',
+                    message=(
+                        f'Your request #{blood_request.id} for {request_blood_group} '
+                        f'({request_blood_unit}ml) has been approved.'
+                    ),
+                )
+
+                _create_action_audit(
+                    action=models.ActionAuditLog.ACTION_APPROVE_REQUEST,
+                    entity_type=models.ActionAuditLog.ENTITY_REQUEST,
+                    entity_id=blood_request.id,
+                    bloodgroup=request_blood_group,
+                    units=request_blood_unit,
+                    status_before='Pending',
+                    status_after='Approved',
+                    actor=request.user,
+                    notes='Request approved and stock deducted.',
+                    payload={
+                        'old_stock': old_stock,
+                        'new_stock': stock.unit,
+                        'patient_name': patient_name,
+                    },
+                )
 
                 # Success message with details
                 messages.success(
@@ -1277,7 +1828,29 @@ def update_approve_status_view(request, pk):
                 if stock.unit == 0:
                     blood_request.status = "Rejected"
                     blood_request.save(update_fields=['status'])
+                    _notify_request_owner_inapp(
+                        blood_request,
+                        title='Blood Request Rejected',
+                        message=(
+                            f'Your request #{blood_request.id} for {request_blood_group} '
+                            'was rejected because stock is currently unavailable.'
+                        ),
+                    )
                     messages.info(request, f'Request automatically rejected due to zero stock.')
+                    _create_action_audit(
+                        action=models.ActionAuditLog.ACTION_REJECT_REQUEST,
+                        entity_type=models.ActionAuditLog.ENTITY_REQUEST,
+                        entity_id=blood_request.id,
+                        bloodgroup=request_blood_group,
+                        units=request_blood_unit,
+                        status_before='Pending',
+                        status_after='Rejected',
+                        actor=request.user,
+                        notes='Auto-rejected because stock was zero.',
+                        payload={
+                            'available_stock': stock.unit,
+                        },
+                    )
 
         # Fire-and-forget notifications outside the DB transaction.
         if blood_request.status == "Approved":
@@ -1365,7 +1938,7 @@ def retry_approval_sms_view(request, pk):
 @login_required
 @require_POST
 def update_reject_status_view(request, pk):
-    if not request.user.is_superuser:
+    if not _has_role_permission(request.user, 'can_review_requests'):
         return redirect('adminlogin')
     
     try:
@@ -1374,6 +1947,17 @@ def update_reject_status_view(request, pk):
         # Check if already processed
         if blood_request.status != 'Pending':
             messages.warning(request, f'This request has already been {blood_request.status.lower()}.')
+            _create_action_audit(
+                action=models.ActionAuditLog.ACTION_REJECT_REQUEST,
+                entity_type=models.ActionAuditLog.ENTITY_REQUEST,
+                entity_id=blood_request.id,
+                bloodgroup=blood_request.bloodgroup,
+                units=blood_request.unit,
+                status_before=blood_request.status,
+                status_after=blood_request.status,
+                actor=request.user,
+                notes='Reject skipped because request already processed.',
+            )
             return redirect('admin-request')
         
         # Get request details for logging
@@ -1383,7 +1967,29 @@ def update_reject_status_view(request, pk):
         
         # Reject the request
         blood_request.status = "Rejected"
-        blood_request.save()
+        blood_request.save(update_fields=['status'])
+
+        _notify_request_owner_inapp(
+            blood_request,
+            title='Blood Request Rejected',
+            message=(
+                f'Your request #{blood_request.id} for {request_blood_group} '
+                'was rejected after admin review.'
+            ),
+        )
+
+        _create_action_audit(
+            action=models.ActionAuditLog.ACTION_REJECT_REQUEST,
+            entity_type=models.ActionAuditLog.ENTITY_REQUEST,
+            entity_id=blood_request.id,
+            bloodgroup=request_blood_group,
+            units=request_blood_unit,
+            status_before='Pending',
+            status_after='Rejected',
+            actor=request.user,
+            notes='Request rejected by reviewer.',
+            payload={'patient_name': patient_name},
+        )
         
         messages.success(
             request, 
@@ -1437,7 +2043,7 @@ def update_reject_status_view(request, pk):
 @login_required
 @require_POST
 def approve_donation_view(request, pk):
-    if not request.user.is_superuser:
+    if not _has_role_permission(request.user, 'can_review_donations'):
         return redirect('adminlogin')
     
     try:
@@ -1447,6 +2053,17 @@ def approve_donation_view(request, pk):
             # Check if already processed
             if donation.status != 'Pending':
                 messages.warning(request, f'This donation has already been {donation.status.lower()}.')
+                _create_action_audit(
+                    action=models.ActionAuditLog.ACTION_APPROVE_DONATION,
+                    entity_type=models.ActionAuditLog.ENTITY_DONATION,
+                    entity_id=donation.id,
+                    bloodgroup=donation.bloodgroup,
+                    units=donation.unit,
+                    status_before=donation.status,
+                    status_after=donation.status,
+                    actor=request.user,
+                    notes='Approve skipped because donation already processed.',
+                )
                 return redirect('admin-donation')
 
             donation_blood_group = donation.bloodgroup
@@ -1466,6 +2083,32 @@ def approve_donation_view(request, pk):
 
             donation.status = 'Approved'
             donation.save(update_fields=['status'])
+
+            _create_inapp_notification_safe(
+                donor=donation.donor,
+                title='Donation Approved',
+                message=(
+                    f'Your donation #{donation.id} of {donation_blood_unit}ml '
+                    f'({donation_blood_group}) has been approved.'
+                ),
+            )
+
+            _create_action_audit(
+                action=models.ActionAuditLog.ACTION_APPROVE_DONATION,
+                entity_type=models.ActionAuditLog.ENTITY_DONATION,
+                entity_id=donation.id,
+                bloodgroup=donation_blood_group,
+                units=donation_blood_unit,
+                status_before='Pending',
+                status_after='Approved',
+                actor=request.user,
+                notes='Donation approved and stock incremented.',
+                payload={
+                    'old_stock': old_stock,
+                    'new_stock': stock.unit,
+                    'donor_name': donor_name,
+                },
+            )
 
             # Keep donor eligibility state in sync
             try:
@@ -1525,7 +2168,7 @@ def approve_donation_view(request, pk):
 @login_required
 @require_POST
 def reject_donation_view(request, pk):
-    if not request.user.is_superuser:
+    if not _has_role_permission(request.user, 'can_review_donations'):
         return redirect('adminlogin')
     
     try:
@@ -1534,6 +2177,17 @@ def reject_donation_view(request, pk):
         # Check if already processed
         if donation.status != 'Pending':
             messages.warning(request, f'This donation has already been {donation.status.lower()}.')
+            _create_action_audit(
+                action=models.ActionAuditLog.ACTION_REJECT_DONATION,
+                entity_type=models.ActionAuditLog.ENTITY_DONATION,
+                entity_id=donation.id,
+                bloodgroup=donation.bloodgroup,
+                units=donation.unit,
+                status_before=donation.status,
+                status_after=donation.status,
+                actor=request.user,
+                notes='Reject skipped because donation already processed.',
+            )
             return redirect('admin-donation')
         
         donor_name = donation.donor.get_name
@@ -1541,7 +2195,29 @@ def reject_donation_view(request, pk):
         donation_blood_unit = donation.unit
         
         donation.status = 'Rejected'
-        donation.save()
+        donation.save(update_fields=['status'])
+
+        _create_inapp_notification_safe(
+            donor=donation.donor,
+            title='Donation Rejected',
+            message=(
+                f'Your donation #{donation.id} of {donation_blood_unit}ml '
+                f'({donation_blood_group}) was rejected after review.'
+            ),
+        )
+
+        _create_action_audit(
+            action=models.ActionAuditLog.ACTION_REJECT_DONATION,
+            entity_type=models.ActionAuditLog.ENTITY_DONATION,
+            entity_id=donation.id,
+            bloodgroup=donation_blood_group,
+            units=donation_blood_unit,
+            status_before='Pending',
+            status_after='Rejected',
+            actor=request.user,
+            notes='Donation rejected by reviewer.',
+            payload={'donor_name': donor_name},
+        )
         
         messages.success(
             request, 
@@ -1609,7 +2285,7 @@ def request_blood_redirect_view(request):
 
 @login_required
 def admin_donation_view(request):
-    if not request.user.is_superuser:
+    if not _has_role_permission(request.user, 'can_review_donations'):
         return redirect('adminlogin')
     
     # Get all donations with donor information, ordered by most recent first
@@ -1661,6 +2337,338 @@ def admin_donation_view(request):
     }
     
     return render(request, 'blood/admin_donation.html', context)
+
+
+@login_required
+def admin_audit_logs_view(request):
+    if not _has_role_permission(request.user, 'can_view_audit_logs'):
+        return redirect('adminlogin')
+
+    created_count = _backfill_audit_logs_from_existing_data()
+    if created_count:
+        messages.info(request, f'Loaded {created_count} historical audit event(s) from existing records.')
+
+    action_filter = request.GET.get('action', '').strip()
+    entity_filter = request.GET.get('entity', '').strip()
+    actor_filter = request.GET.get('actor', '').strip()
+    entity_id_filter = request.GET.get('entity_id', '').strip()
+    date_from_raw = request.GET.get('date_from', '').strip()
+    date_to_raw = request.GET.get('date_to', '').strip()
+
+    date_from = None
+    date_to = None
+    try:
+        if date_from_raw:
+            date_from = datetime.strptime(date_from_raw, '%Y-%m-%d').date()
+        if date_to_raw:
+            date_to = datetime.strptime(date_to_raw, '%Y-%m-%d').date()
+    except ValueError:
+        date_from = None
+        date_to = None
+        messages.warning(request, 'Invalid date filter supplied. Showing all dates.')
+
+    audit_qs = models.ActionAuditLog.objects.select_related('actor').all()
+    if action_filter:
+        audit_qs = audit_qs.filter(action=action_filter)
+    if entity_filter:
+        audit_qs = audit_qs.filter(entity_type=entity_filter)
+    if actor_filter:
+        audit_qs = audit_qs.filter(actor_username__icontains=actor_filter)
+    if entity_id_filter.isdigit():
+        audit_qs = audit_qs.filter(entity_id=int(entity_id_filter))
+    if date_from:
+        audit_qs = audit_qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        audit_qs = audit_qs.filter(created_at__date__lte=date_to)
+
+    now = timezone.now()
+    summary = {
+        'total': audit_qs.count(),
+        'approve_actions': audit_qs.filter(action__startswith='APPROVE_').count(),
+        'reject_actions': audit_qs.filter(action__startswith='REJECT_').count(),
+        'last_24h': audit_qs.filter(created_at__gte=now - timedelta(hours=24)).count(),
+        'last_7d': audit_qs.filter(created_at__gte=now - timedelta(days=7)).count(),
+    }
+
+    top_actors = (
+        audit_qs.exclude(actor_username='')
+        .values('actor_username')
+        .annotate(total=Count('id'))
+        .order_by('-total')[:5]
+    )
+
+    paginator = Paginator(audit_qs, 30)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        'page_obj': page_obj,
+        'action_filter': action_filter,
+        'entity_filter': entity_filter,
+        'actor_filter': actor_filter,
+        'entity_id_filter': entity_id_filter,
+        'date_from_value': date_from_raw,
+        'date_to_value': date_to_raw,
+        'summary': summary,
+        'top_actors': top_actors,
+        'action_choices': models.ActionAuditLog._meta.get_field('action').choices,
+        'entity_choices': models.ActionAuditLog._meta.get_field('entity_type').choices,
+    }
+    return render(request, 'blood/admin_audit_logs.html', context)
+
+
+@login_required
+def admin_reports_view(request):
+    if not _has_role_permission(request.user, 'can_export_reports'):
+        return redirect('adminlogin')
+
+    start_date_raw = request.GET.get('start_date', '').strip()
+    end_date_raw = request.GET.get('end_date', '').strip()
+
+    start_date = None
+    end_date = None
+    try:
+        if start_date_raw:
+            start_date = datetime.strptime(start_date_raw, '%Y-%m-%d').date()
+        if end_date_raw:
+            end_date = datetime.strptime(end_date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        messages.warning(request, 'Invalid date range supplied; showing full report window.')
+        start_date = None
+        end_date = None
+
+    requests_qs = models.BloodRequest.objects.select_related('patient', 'request_by_donor').all().order_by('-date', '-id')
+    donations_qs = dmodels.BloodDonate.objects.select_related('donor__user').all().order_by('-date', '-id')
+
+    if start_date:
+        requests_qs = requests_qs.filter(date__gte=start_date)
+        donations_qs = donations_qs.filter(date__gte=start_date)
+    if end_date:
+        requests_qs = requests_qs.filter(date__lte=end_date)
+        donations_qs = donations_qs.filter(date__lte=end_date)
+
+    stocks = models.Stock.objects.all().order_by('bloodgroup')
+
+    approved_requests = requests_qs.filter(status='Approved')
+    approved_donations = donations_qs.filter(status='Approved')
+
+    fulfilled_units = approved_donations.aggregate(total=Sum('unit'))['total'] or 0
+    allocated_units = approved_requests.aggregate(total=Sum('unit'))['total'] or 0
+    fulfillment_rate = round((fulfilled_units * 100) / allocated_units, 1) if allocated_units else 0
+
+    summary = {
+        'total_requests': requests_qs.count(),
+        'approved_requests': approved_requests.count(),
+        'pending_requests': requests_qs.filter(status='Pending').count(),
+        'rejected_requests': requests_qs.filter(status='Rejected').count(),
+        'total_donations': donations_qs.count(),
+        'approved_donations': approved_donations.count(),
+        'stock_units': stocks.aggregate(total=Sum('unit'))['total'] or 0,
+        'allocated_units': allocated_units,
+        'fulfilled_units': fulfilled_units,
+        'fulfillment_rate': fulfillment_rate,
+    }
+
+    export_query = ''
+    if start_date_raw or end_date_raw:
+        chunks = []
+        if start_date_raw:
+            chunks.append(f"start_date={start_date_raw}")
+        if end_date_raw:
+            chunks.append(f"end_date={end_date_raw}")
+        export_query = '&'.join(chunks)
+
+    recent_exports = models.ReportExportLog.objects.order_by('-created_at')[:12]
+
+    status_breakdown = {
+        'requests_pending': requests_qs.filter(status='Pending').count(),
+        'requests_approved': requests_qs.filter(status='Approved').count(),
+        'requests_rejected': requests_qs.filter(status='Rejected').count(),
+        'donations_pending': donations_qs.filter(status='Pending').count(),
+        'donations_approved': donations_qs.filter(status='Approved').count(),
+        'donations_rejected': donations_qs.filter(status='Rejected').count(),
+    }
+
+    context = {
+        'stocks': stocks,
+        'requests_sample': requests_qs[:20],
+        'summary': summary,
+        'status_breakdown': status_breakdown,
+        'recent_exports': recent_exports,
+        'export_query': export_query,
+        'start_date_value': start_date.strftime('%Y-%m-%d') if start_date else '',
+        'end_date_value': end_date.strftime('%Y-%m-%d') if end_date else '',
+    }
+    return render(request, 'blood/admin_reports.html', context)
+
+
+@login_required
+def admin_reports_export_view(request, report_key, fmt):
+    if not _has_role_permission(request.user, 'can_export_reports'):
+        return redirect('adminlogin')
+
+    if report_key not in {'stock', 'requests', 'fulfillment'} or fmt not in {'csv', 'pdf'}:
+        raise Http404
+
+    start_date_raw = request.GET.get('start_date', '').strip()
+    end_date_raw = request.GET.get('end_date', '').strip()
+    start_date = None
+    end_date = None
+    try:
+        if start_date_raw:
+            start_date = datetime.strptime(start_date_raw, '%Y-%m-%d').date()
+        if end_date_raw:
+            end_date = datetime.strptime(end_date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        start_date = None
+        end_date = None
+
+    if report_key == 'stock':
+        headers = ['Blood Group', 'Units (ml)']
+        rows = [[row.bloodgroup, row.unit] for row in models.Stock.objects.order_by('bloodgroup')]
+        title = 'Blood Stock Report'
+    elif report_key == 'requests':
+        reqs = models.BloodRequest.objects.select_related('patient', 'request_by_donor').order_by('-date', '-id')
+        if start_date:
+            reqs = reqs.filter(date__gte=start_date)
+        if end_date:
+            reqs = reqs.filter(date__lte=end_date)
+        reqs = reqs[:1000]
+        headers = ['Request ID', 'Date', 'Patient Name', 'Blood Group', 'Units (ml)', 'Status', 'Channel']
+        rows = []
+        for req in reqs:
+            if req.patient_id:
+                channel = 'Patient Portal'
+            elif req.request_by_donor_id:
+                channel = 'Donor Self-Serve'
+            else:
+                channel = 'Quick Request'
+            rows.append([req.id, req.date, req.patient_name, req.bloodgroup, req.unit, req.status, channel])
+        title = 'Blood Requests Report'
+    else:
+        request_scope = models.BloodRequest.objects.all()
+        donation_scope = dmodels.BloodDonate.objects.all()
+        if start_date:
+            request_scope = request_scope.filter(date__gte=start_date)
+            donation_scope = donation_scope.filter(date__gte=start_date)
+        if end_date:
+            request_scope = request_scope.filter(date__lte=end_date)
+            donation_scope = donation_scope.filter(date__lte=end_date)
+
+        requests_total = request_scope.count()
+        approved_requests = request_scope.filter(status='Approved').count()
+        approved_request_units = request_scope.filter(status='Approved').aggregate(total=Sum('unit'))['total'] or 0
+        approved_donation_units = donation_scope.filter(status='Approved').aggregate(total=Sum('unit'))['total'] or 0
+        fulfillment_rate = round((approved_donation_units * 100) / approved_request_units, 1) if approved_request_units else 0
+
+        headers = ['Metric', 'Value']
+        rows = [
+            ['Total Requests', requests_total],
+            ['Approved Requests', approved_requests],
+            ['Allocated Units (Approved Requests, ml)', approved_request_units],
+            ['Fulfilled Units (Approved Donations, ml)', approved_donation_units],
+            ['Fulfillment Rate (%)', fulfillment_rate],
+        ]
+        title = 'Fulfillment Report'
+
+    if fmt == 'csv':
+        filename = f"{report_key}_report_{timezone.now().strftime('%Y%m%d_%H%M')}.csv"
+        models.ReportExportLog.objects.create(
+            report_key=report_key,
+            export_format='csv',
+            rows_exported=len(rows),
+            actor=request.user if request.user.is_authenticated else None,
+            actor_username=getattr(request.user, 'username', '') if request.user.is_authenticated else '',
+            actor_role=_actor_role_label(request.user),
+            filters={
+                'start_date': start_date_raw,
+                'end_date': end_date_raw,
+            },
+            status=models.ReportExportLog.STATUS_SUCCESS,
+        )
+        return _build_csv_response(filename, headers, rows)
+
+    filename = f"{report_key}_report_{timezone.now().strftime('%Y%m%d_%H%M')}.pdf"
+    pdf_response = _build_pdf_response(title, headers, rows, filename)
+    if pdf_response:
+        models.ReportExportLog.objects.create(
+            report_key=report_key,
+            export_format='pdf',
+            rows_exported=len(rows),
+            actor=request.user if request.user.is_authenticated else None,
+            actor_username=getattr(request.user, 'username', '') if request.user.is_authenticated else '',
+            actor_role=_actor_role_label(request.user),
+            filters={
+                'start_date': start_date_raw,
+                'end_date': end_date_raw,
+            },
+            status=models.ReportExportLog.STATUS_SUCCESS,
+        )
+        return pdf_response
+
+    html = render_to_string(
+        'blood/report_print.html',
+        {
+            'title': title,
+            'headers': headers,
+            'rows': rows,
+            'generated_at': timezone.now(),
+            'pdf_dependency_missing': True,
+        },
+    )
+    models.ReportExportLog.objects.create(
+        report_key=report_key,
+        export_format='pdf',
+        rows_exported=len(rows),
+        actor=request.user if request.user.is_authenticated else None,
+        actor_username=getattr(request.user, 'username', '') if request.user.is_authenticated else '',
+        actor_role=_actor_role_label(request.user),
+        filters={
+            'start_date': start_date_raw,
+            'end_date': end_date_raw,
+        },
+        status=models.ReportExportLog.STATUS_FALLBACK,
+        error='reportlab not installed; served printable HTML fallback',
+    )
+    return HttpResponse(html)
+
+
+def service_worker_js_view(request):
+    script = """
+const CACHE_NAME = 'bloodbridge-pwa-v1';
+const OFFLINE_URLS = [
+  '/',
+  '/quick-request/',
+  '/static/manifest.webmanifest'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_URLS)));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+        return response;
+      })
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/quick-request/')))
+  );
+});
+""".strip()
+    return HttpResponse(script, content_type='application/javascript')
 
 
 @login_required
@@ -1745,6 +2753,7 @@ def admin_analytics_view(request):
     request_units = requests_qs.aggregate(total=Sum('unit'))['total'] or 0
     approved_request_units = approved_requests_qs.aggregate(total=Sum('unit'))['total'] or 0
     donation_units = approved_donations_qs.aggregate(total=Sum('unit'))['total'] or 0
+    urgent_pending_count = requests_qs.filter(status='Pending', is_urgent=True).count()
 
     summary_snapshot = {
         'requests_total': requests_qs.count(),
@@ -1760,6 +2769,12 @@ def admin_analytics_view(request):
     conversion_rate = 0
     if summary_snapshot['requests_total']:
         conversion_rate = round((summary_snapshot['requests_approved'] * 100) / summary_snapshot['requests_total'], 1)
+
+    fulfillment_ratio = 0
+    if summary_snapshot['approved_request_units']:
+        fulfillment_ratio = round((summary_snapshot['donation_units'] * 100) / summary_snapshot['approved_request_units'], 1)
+    elif summary_snapshot['donation_units']:
+        fulfillment_ratio = 100
 
     summary_cards = [
         {
@@ -1789,6 +2804,20 @@ def admin_analytics_view(request):
             'subtitle': 'Approved donations',
             'accent_class': 'accent-indigo',
             'icon': 'fa-hand-holding-heart',
+        },
+        {
+            'title': 'Fulfillment Ratio',
+            'value': f"{fulfillment_ratio}%",
+            'subtitle': 'Donated vs allocated units',
+            'accent_class': 'accent-green',
+            'icon': 'fa-balance-scale',
+        },
+        {
+            'title': 'Pending Queue',
+            'value': summary_snapshot['requests_pending'],
+            'subtitle': 'Requests waiting approval',
+            'accent_class': 'accent-pink',
+            'icon': 'fa-hourglass-half',
         },
     ]
 
@@ -1970,6 +2999,28 @@ def admin_analytics_view(request):
         cls=DjangoJSONEncoder,
     )
 
+    # Weekday pattern (units)
+    weekday_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    weekday_requests = {label: 0.0 for label in weekday_labels}
+    weekday_donations = {label: 0.0 for label in weekday_labels}
+
+    for req in requests_qs.only('date', 'unit'):
+        label = weekday_labels[req.date.weekday()]
+        weekday_requests[label] += float(req.unit or 0)
+
+    for donation in approved_donations_qs.only('date', 'unit'):
+        label = weekday_labels[donation.date.weekday()]
+        weekday_donations[label] += float(donation.unit or 0)
+
+    weekday_pattern_payload = json.dumps(
+        {
+            'labels': weekday_labels,
+            'requests': [round(weekday_requests[label], 2) for label in weekday_labels],
+            'donations': [round(weekday_donations[label], 2) for label in weekday_labels],
+        },
+        cls=DjangoJSONEncoder,
+    )
+
     # Monthly summary (grouped by trunc month)
     monthly_dict = OrderedDict()
     request_months = requests_qs.annotate(month=TruncMonth('date')).values('month').annotate(
@@ -2045,21 +3096,85 @@ def admin_analytics_view(request):
             continue
         full_name = donor.get_name
         total_units_value = float(entry['total_units'] or 0)
+        random_avatar_url = f"https://i.pravatar.cc/150?u=donor-{donor.id}"
         top_donors.append({
             'name': full_name,
             'units': total_units_value,
         })
         top_donor_cards.append({
             'rank': rank,
+            'id': donor.id,
             'name': full_name,
             'bloodgroup': donor.bloodgroup,
             'units': total_units_value,
             'donation_count': entry['donation_count'] or 0,
             'last_donation': entry['last_donation'],
-            'profile_pic_url': donor.profile_pic.url if donor.has_profile_pic else placeholder_avatar,
+            'profile_pic_url': donor.profile_pic.url if donor.has_profile_pic else random_avatar_url,
+            'random_profile_pic_url': random_avatar_url,
+            'placeholder_avatar_url': placeholder_avatar,
         })
 
     top_requesters_payload = json.dumps(top_requesters, cls=DjangoJSONEncoder)
+
+    # Inventory pressure scoring (higher means more risk)
+    inventory_pressure_rows = []
+    inventory_gap_labels = []
+    inventory_gap_values = []
+    for bg in blood_groups:
+        demand_units = float(blood_group_requests.get(bg, 0) or 0)
+        donation_units_bg = float(blood_group_donations.get(bg, 0) or 0)
+        stock_units = float(blood_group_stock.get(bg, 0) or 0)
+
+        net_gap = round(demand_units - donation_units_bg, 2)
+        avg_daily_demand = (demand_units / date_span) if date_span else 0
+        stock_coverage_days = round((stock_units / avg_daily_demand), 1) if avg_daily_demand > 0 else None
+
+        risk_score = max(0.0, net_gap) + max(0.0, demand_units - stock_units)
+        if net_gap > 0 and ((stock_coverage_days is not None and stock_coverage_days < 7) or demand_units > stock_units):
+            risk_level = 'High'
+        elif net_gap > 0:
+            risk_level = 'Medium'
+        else:
+            risk_level = 'Low'
+
+        inventory_pressure_rows.append({
+            'bloodgroup': bg,
+            'demand_units': round(demand_units, 2),
+            'donation_units': round(donation_units_bg, 2),
+            'stock_units': round(stock_units, 2),
+            'net_gap': net_gap,
+            'coverage_days': stock_coverage_days,
+            'risk_level': risk_level,
+            'risk_score': round(risk_score, 2),
+        })
+
+        inventory_gap_labels.append(bg)
+        inventory_gap_values.append(net_gap)
+
+    inventory_pressure_rows = sorted(
+        inventory_pressure_rows,
+        key=lambda row: row['risk_score'],
+        reverse=True,
+    )
+
+    inventory_gap_payload = json.dumps(
+        {
+            'labels': inventory_gap_labels,
+            'gaps': inventory_gap_values,
+        },
+        cls=DjangoJSONEncoder,
+    )
+
+    action_flags = []
+    if summary_snapshot['requests_pending'] > 0:
+        action_flags.append(f"{summary_snapshot['requests_pending']} requests are pending review.")
+    if urgent_pending_count > 0:
+        action_flags.append(f"{urgent_pending_count} urgent request(s) need priority handling.")
+    if fulfillment_ratio < 100 and summary_snapshot['approved_request_units'] > 0:
+        deficit = round(summary_snapshot['approved_request_units'] - summary_snapshot['donation_units'], 2)
+        action_flags.append(f"Donation supply trails approved demand by {deficit} ml in this window.")
+
+    top_inventory_risks = [row for row in inventory_pressure_rows if row['risk_level'] != 'Low'][:5]
 
     context = {
         'date_range_label': date_range_label,
@@ -2073,12 +3188,18 @@ def admin_analytics_view(request):
         'status_data': status_payload,
     'status_timeline_data': status_timeline_payload,
     'channel_mix_data': channel_mix_payload,
+    'weekday_pattern_data': weekday_pattern_payload,
     'monthly_summary_data': monthly_summary_payload,
     'top_requesters_data': top_requesters_payload,
     'top_donor_cards': top_donor_cards,
+    'inventory_pressure_rows': inventory_pressure_rows[:8],
+    'inventory_gap_data': inventory_gap_payload,
+    'top_inventory_risks': top_inventory_risks,
+    'action_flags': action_flags,
         'comparison_rows': comparison_rows,
         'compare_enabled': compare_enabled,
         'conversion_rate': conversion_rate,
+    'fulfillment_ratio': fulfillment_ratio,
         'fallback_applied': fallback_applied,
         'fallback_message': fallback_message,
         'active_panel': active_panel,
@@ -2102,16 +3223,19 @@ def admin_leadership_view(request):
 
     donor_leaderboard = []
     for idx, donor in enumerate(donor_stats_qs, start=1):
+        random_avatar_url = f"https://i.pravatar.cc/150?u=donor-{donor.id}"
         try:
-            pic = donor.profile_pic.url if donor.profile_pic and hasattr(donor.profile_pic, 'url') else placeholder_avatar
+            pic = donor.profile_pic.url if donor.profile_pic and hasattr(donor.profile_pic, 'url') else random_avatar_url
         except Exception:
-            pic = placeholder_avatar
+            pic = random_avatar_url
         donor_leaderboard.append({
             'rank': idx,
             'id': donor.id,
             'name': donor.get_name,
             'username': donor.user.username,
             'profile_pic': pic,
+            'random_profile_pic': random_avatar_url,
+            'placeholder_avatar_url': placeholder_avatar,
             'bloodgroup': donor.bloodgroup,
             'total_units': float(donor.total_units or 0),
             'donations_count': int(donor.donations_count or 0),
@@ -2129,16 +3253,19 @@ def admin_leadership_view(request):
     approved_donations = dmodels.BloodDonate.objects.filter(status='Approved').select_related('donor__user').order_by('-date')
     recent_activity = []
     for donation in approved_donations[:6]:
+        random_avatar_url = f"https://i.pravatar.cc/150?u=donor-{donation.donor.id}"
         try:
-            donor_pic = donation.donor.profile_pic.url if donation.donor.profile_pic and hasattr(donation.donor.profile_pic, 'url') else placeholder_avatar
+            donor_pic = donation.donor.profile_pic.url if donation.donor.profile_pic and hasattr(donation.donor.profile_pic, 'url') else random_avatar_url
         except Exception:
-            donor_pic = placeholder_avatar
+            donor_pic = random_avatar_url
         recent_activity.append({
             'name': donation.donor.get_name,
             'bloodgroup': donation.bloodgroup,
             'units': donation.unit,
             'date': donation.date,
             'profile_pic': donor_pic,
+            'random_profile_pic': random_avatar_url,
+            'placeholder_avatar_url': placeholder_avatar,
         })
 
     blood_group_totals = []

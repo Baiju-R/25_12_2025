@@ -371,6 +371,80 @@
         font-size: 1.2rem;
     }
 
+    .health-panel {
+        margin-top: 24px;
+        background: #ffffff;
+        border-radius: 22px;
+        padding: 22px;
+        box-shadow: 0 20px 38px rgba(2, 6, 23, 0.07);
+    }
+
+    .health-panel h3 {
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    .health-list {
+        margin: 0;
+        padding-left: 18px;
+        color: #374151;
+    }
+
+    .health-list li {
+        margin-bottom: 8px;
+        font-weight: 500;
+    }
+
+    .health-ok {
+        color: #059669;
+        font-weight: 700;
+        margin: 0;
+    }
+
+    .risk-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .risk-table th,
+    .risk-table td {
+        padding: 10px 8px;
+        border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+        text-align: left;
+        font-size: 0.9rem;
+    }
+
+    .risk-table th {
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.7px;
+        font-size: 0.74rem;
+    }
+
+    .risk-badge {
+        display: inline-flex;
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-weight: 700;
+        font-size: 0.75rem;
+    }
+
+    .risk-badge.high {
+        background: rgba(248, 113, 113, 0.2);
+        color: #b91c1c;
+    }
+
+    .risk-badge.medium {
+        background: rgba(251, 191, 36, 0.22);
+        color: #b45309;
+    }
+
+    .risk-badge.low {
+        background: rgba(52, 211, 153, 0.2);
+        color: #047857;
+    }
+
     .comparison-table {
         width: 100%;
         border-collapse: collapse;
@@ -527,6 +601,19 @@
         {% endfor %}
     </div>
 
+    <div class="health-panel">
+        <h3><i class="fas fa-tasks"></i> Actions Needed</h3>
+        {% if action_flags %}
+            <ul class="health-list">
+                {% for item in action_flags %}
+                    <li>{{ item }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="health-ok"><i class="fas fa-check-circle"></i> No critical alerts for the selected range.</p>
+        {% endif %}
+    </div>
+
     {% if compare_enabled and comparison_rows %}
     <div class="comparison-panel">
         <h3><i class="fas fa-exchange-alt"></i> Period-over-Period Movement</h3>
@@ -600,6 +687,10 @@
                 <h3>Monthly Throughput (last 6 months)</h3>
                 <canvas id="monthlyChart"></canvas>
             </div>
+            <div class="chart-card span-2">
+                <h3>Weekday Demand vs Donations</h3>
+                <canvas id="weekdayChart"></canvas>
+            </div>
             <div class="chart-card">
                 <h3>Net Movement (Donations − Allocations)</h3>
                 <canvas id="netFlowChart"></canvas>
@@ -618,6 +709,43 @@
             <div class="chart-card">
                 <h3>Approval Mix</h3>
                 <canvas id="statusChart"></canvas>
+            </div>
+            <div class="chart-card span-2">
+                <h3>Supply-Demand Gap by Blood Group</h3>
+                <canvas id="inventoryGapChart"></canvas>
+            </div>
+            <div class="chart-card span-2">
+                <h3>Inventory Risk Table</h3>
+                <div class="table-responsive">
+                    <table class="risk-table">
+                        <thead>
+                            <tr>
+                                <th>Group</th>
+                                <th>Demand (ml)</th>
+                                <th>Donated (ml)</th>
+                                <th>Stock (ml)</th>
+                                <th>Gap (ml)</th>
+                                <th>Coverage</th>
+                                <th>Risk</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in inventory_pressure_rows %}
+                            <tr>
+                                <td><strong>{{ row.bloodgroup }}</strong></td>
+                                <td>{{ row.demand_units|floatformat:0 }}</td>
+                                <td>{{ row.donation_units|floatformat:0 }}</td>
+                                <td>{{ row.stock_units|floatformat:0 }}</td>
+                                <td>{{ row.net_gap|floatformat:0 }}</td>
+                                <td>{% if row.coverage_days %}{{ row.coverage_days }} days{% else %}N/A{% endif %}</td>
+                                <td>
+                                    <span class="risk-badge {{ row.risk_level|lower }}">{{ row.risk_level }}</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </section>
 
@@ -638,7 +766,11 @@
                         <div class="leaderboard-row {% if donor.rank == 1 %}highlight{% endif %}">
                             <div class="leaderboard-rank">#{{ donor.rank }}</div>
                             <div class="leaderboard-avatar">
-                                <img src="{{ donor.profile_pic_url }}" alt="{{ donor.name }} profile">
+                                <img src="{{ donor.profile_pic_url }}"
+                                     alt="{{ donor.name }} profile"
+                                     data-random-src="{{ donor.random_profile_pic_url }}"
+                                     data-placeholder-src="{{ donor.placeholder_avatar_url }}"
+                                     onerror="if(!this.dataset.fallbackApplied){this.dataset.fallbackApplied='1'; this.src=this.dataset.randomSrc; return;} this.onerror=null; this.src=this.dataset.placeholderSrc;">
                             </div>
                             <div class="leaderboard-info">
                                 <h4>{{ donor.name }}</h4>
@@ -679,7 +811,9 @@
     const statusTimelineData = JSON.parse('{{ status_timeline_data|escapejs }}');
     const bloodGroupData = JSON.parse('{{ blood_group_data|escapejs }}');
     const channelMixData = JSON.parse('{{ channel_mix_data|escapejs }}');
+    const weekdayPatternData = JSON.parse('{{ weekday_pattern_data|escapejs }}');
     const monthlySummaryData = JSON.parse('{{ monthly_summary_data|escapejs }}');
+    const inventoryGapData = JSON.parse('{{ inventory_gap_data|escapejs }}');
     const requesterData = JSON.parse('{{ top_requesters_data|escapejs }}');
 
     const deckTabs = document.getElementById('deckTabs');
@@ -1019,6 +1153,62 @@
                     grid: { drawOnChartArea: false },
                     title: { display: true, text: 'Units (ml)' }
                 }
+            }
+        }
+    });
+
+    const weekdayCtx = document.getElementById('weekdayChart').getContext('2d');
+    new Chart(weekdayCtx, {
+        type: 'bar',
+        data: {
+            labels: weekdayPatternData.labels,
+            datasets: [
+                {
+                    label: 'Requests (ml)',
+                    data: weekdayPatternData.requests,
+                    backgroundColor: 'rgba(251, 113, 133, 0.75)',
+                    borderRadius: 10,
+                },
+                {
+                    label: 'Donations (ml)',
+                    data: weekdayPatternData.donations,
+                    backgroundColor: 'rgba(52, 211, 153, 0.75)',
+                    borderRadius: 10,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom' } },
+            scales: {
+                y: { beginAtZero: true },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+
+    const inventoryGapCtx = document.getElementById('inventoryGapChart').getContext('2d');
+    new Chart(inventoryGapCtx, {
+        type: 'bar',
+        data: {
+            labels: inventoryGapData.labels,
+            datasets: [
+                {
+                    label: 'Net Gap (Demand - Donation) ml',
+                    data: inventoryGapData.gaps,
+                    backgroundColor: inventoryGapData.gaps.map(value => value > 0 ? 'rgba(248, 113, 113, 0.75)' : 'rgba(52, 211, 153, 0.75)'),
+                    borderRadius: 10,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom' } },
+            scales: {
+                y: { beginAtZero: true },
+                x: { grid: { display: false } }
             }
         }
     });

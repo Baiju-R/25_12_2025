@@ -1,12 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+	{% load static %}
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 	<title>Patient Portal - BloodBridge</title>
+	<meta name="theme-color" content="#e74c3c">
+	<link rel="manifest" href="/static/manifest.webmanifest">
 	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
 	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.14.0/css/all.min.css">
 	<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="{% static 'css/responsive-enhancements.css' %}">
 
 	<style>
 		*{font-family:'Poppins',sans-serif}
@@ -51,6 +55,7 @@
 			<li><a href="{% url 'patient-dashboard' %}" class="{% if request.path == '/patient/dashboard/' %}active{% endif %}"><i class="fas fa-home"></i> Dashboard</a></li>
 			<li><a href="{% url 'make-request' %}" class="{% if request.path == '/patient/make-request/' %}active{% endif %}"><i class="fas fa-plus-circle"></i> Request Blood</a></li>
 			<li><a href="{% url 'my-request' %}" class="{% if request.path == '/patient/my-request/' %}active{% endif %}"><i class="fas fa-list-alt"></i> My Requests</a></li>
+			<li><a href="{% url 'patient-nearby-donors' %}" class="{% if request.path == '/patient/nearby-donors/' %}active{% endif %}"><i class="fas fa-map-marked-alt"></i> Nearby Donors</a></li>
 			<li><a href="{% url 'patient-feedback' %}" class="{% if request.path == '/patient/feedback/' %}active{% endif %}"><i class="fas fa-comment-dots"></i> Feedback</a></li>
 		</ul>
 	</aside>
@@ -74,6 +79,12 @@
 				s.classList.remove('active'); document.getElementById('sidebarBackdrop').classList.remove('active');
 			}
 		});
+
+		if ('serviceWorker' in navigator) {
+			window.addEventListener('load', function() {
+				navigator.serviceWorker.register('/service-worker.js').catch(function() {});
+			});
+		}
 	</script>
 
 	{% include 'blood/faq_button.html' %}

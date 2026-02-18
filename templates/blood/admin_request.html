@@ -198,6 +198,18 @@
         box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
         color: white;
     }
+
+    .btn-emergency {
+        background: linear-gradient(45deg, #7c3aed, #5b21b6);
+        color: white;
+        box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3);
+    }
+
+    .btn-emergency:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(124, 58, 237, 0.45);
+        color: white;
+    }
     
     .btn-approve a, .btn-reject a, .btn-recommend {
         color: white !important;
@@ -449,6 +461,12 @@
                                     <a class="action-btn btn-recommend" href="{% url 'admin-request-recommendations' blood_request.id %}">
                                         <i class="fas fa-brain"></i> Review & Recommend
                                     </a>
+                                    <form method="post" action="{% url 'emergency-broadcast' blood_request.id %}" style="display:inline; margin:0;">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn action-btn btn-emergency" onclick="return confirm('Send emergency broadcast to matching available donors?')">
+                                            <i class="fas fa-bullhorn"></i> Broadcast
+                                        </button>
+                                    </form>
                                     <form method="post" action="{% url 'approve-request' blood_request.id %}" style="display:inline; margin:0;">
                                         {% csrf_token %}
                                         <button type="submit" class="btn action-btn btn-approve" onclick="return confirm('Are you sure you want to APPROVE this blood request? This will deduct blood from stock.')">

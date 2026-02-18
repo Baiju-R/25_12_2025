@@ -1,396 +1,146 @@
 {% extends 'blood/adminbase.html' %}
-{% load math_filters %}
 {% block content %}
 
 <style>
-    /* Enhanced Admin Dashboard Styles */
     .admin-dashboard {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         min-height: 100vh;
         padding: 20px 0;
     }
-    
+
     .dashboard-header {
         text-align: center;
-        color: white;
-        margin-bottom: 40px;
+        color: #fff;
+        margin-bottom: 24px;
     }
-    
+
     .dashboard-header h1 {
-        font-size: 2.5rem;
-        font-weight: 700;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        margin-bottom: 10px;
-    }
-    
-    .dashboard-header p {
-        font-size: 1.2rem;
-        opacity: 0.9;
-    }
-    
-    .blood-card {
-        background: white;
-        border-radius: 15px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-        transition: all 0.3s ease;
-        border: none;
-        overflow: hidden;
-        margin-bottom: 20px;
-        position: relative;
-    }
-    
-    .blood-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 20px 40px rgba(0,0,0,0.15);
-    }
-    
-    .blood-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
-    }
-    
-    .blood-card.positive::before {
-        background: linear-gradient(90deg, #e74c3c, #c0392b);
-    }
-    
-    .blood-card.negative::before {
-        background: linear-gradient(90deg, #3498db, #2980b9);
-    }
-    
-    .stats-card::before {
-        background: linear-gradient(90deg, #27ae60, #2ecc71);
-    }
-    
-    .blood-card-body {
-        padding: 30px 20px;
-        text-align: center;
-    }
-    
-    .blood-type {
         font-size: 2.2rem;
         font-weight: 700;
-        margin-bottom: 15px;
-        color: #2c3e50;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-    }
-    
-    .blood-icon {
-        color: #e74c3c;
-        font-size: 2rem;
-        animation: pulse 2s infinite;
-    }
-    
-    .stats-icon {
-        font-size: 3rem;
-        color: #27ae60;
-        margin-bottom: 15px;
-        animation: pulse 2s infinite;
-    }
-    
-    .stats-icon.donors { color: #3498db; }
-    .stats-icon.requests { color: #f39c12; }
-    .stats-icon.approved { color: #27ae60; }
-    .stats-icon.total { color: #e74c3c; }
-    
-    @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); }
-    }
-    
-    .blood-unit {
-        font-size: 2.5rem;
-        font-weight: 600;
-        color: #27ae60;
-        background: linear-gradient(45deg, #27ae60, #2ecc71);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-    
-    .stats-number {
-        font-size: 2.5rem;
-        font-weight: 600;
-        margin-bottom: 10px;
-    }
-    
-    .stats-number.donors { 
-        background: linear-gradient(45deg, #3498db, #2980b9);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-    
-    .stats-number.requests { 
-        background: linear-gradient(45deg, #f39c12, #e67e22);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-    
-    .stats-number.approved { 
-        background: linear-gradient(45deg, #27ae60, #2ecc71);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-    
-    .stats-number.total { 
-        background: linear-gradient(45deg, #e74c3c, #c0392b);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-    
-    .blood-unit-label, .stats-label {
-        font-size: 0.9rem;
-        color: #7f8c8d;
-        margin-top: 5px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        font-weight: 600;
-    }
-    
-    .section-divider {
-        border: none;
-        height: 2px;
-        background: linear-gradient(90deg, transparent, #e74c3c, transparent);
-        margin: 40px 0;
-    }
-    
-    .section-title {
-        text-align: center;
-        color: white;
-        margin-bottom: 30px;
-        font-size: 1.8rem;
-        font-weight: 600;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        margin-bottom: 6px;
     }
 
-
-    /* Mini charts (no external JS required) */
-    .qa-card-body {
-        padding: 22px;
+    .dashboard-header p {
+        opacity: 0.9;
+        margin-bottom: 0;
     }
 
-    .qa-head {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 12px;
-    }
-
-    .qa-row-spacer {
-        margin-top: 18px;
-    }
-
-    .qa-link {
-        font-weight: 800;
-        color: #3498db;
-        text-decoration: none;
-        white-space: nowrap;
-    }
-
-    .qa-link:hover {
-        text-decoration: underline;
-    }
-
-    .qa-kpi-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
-        margin-top: 10px;
-    }
-
-    .qa-kpi {
-        background: rgba(248, 250, 252, 0.92);
-        border: 1px solid rgba(226, 232, 240, 0.9);
-        border-radius: 14px;
-        padding: 14px;
-        text-align: center;
-    }
-
-    .qa-actions {
-        margin-top: 14px;
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-    }
-
-    .qa-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 12px;
-        font-weight: 800;
-        padding: 10px 14px;
-        text-decoration: none;
-        border: 1px solid rgba(226, 232, 240, 0.9);
-        background: rgba(255,255,255,0.92);
-        color: #2c3e50;
-    }
-
-    .qa-btn:hover {
-        background: rgba(255,255,255,1);
-        text-decoration: none;
-    }
-
-    .mini-card-title {
-        font-weight: 700;
-        color: #2c3e50;
-        margin-bottom: 10px;
-    }
-
-    .mini-subtle {
-        color: #7f8c8d;
-        font-size: 0.9rem;
-    }
-
-    .mini-bar-chart {
-        display: flex;
-        align-items: flex-end;
-        gap: 4px;
-        height: 160px;
-        padding: 10px 10px;
-        background: rgba(248, 250, 252, 0.92);
+    .section-card {
+        background: #fff;
         border-radius: 16px;
-        border: 1px solid rgba(226, 232, 240, 0.9);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+        padding: 18px;
+        margin-bottom: 18px;
     }
 
-    .mini-bar-group {
-        display: flex;
-        align-items: flex-end;
-        gap: 2px;
-        width: 12px;
-    }
-
-    .mini-bar {
-        width: 4px;
-        border-radius: 4px;
-        min-height: 2px;
-    }
-
-    .mini-bar.requests {
-        background: rgba(243, 156, 18, 0.75);
-    }
-
-    .mini-bar.donations {
-        background: rgba(46, 204, 113, 0.75);
-    }
-
-    .mini-legend {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        flex-wrap: wrap;
-        margin-top: 10px;
-    }
-
-    .mini-legend span {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
+    .section-title {
+        font-size: 1.15rem;
         font-weight: 700;
         color: #2c3e50;
-        font-size: 0.9rem;
+        margin-bottom: 14px;
     }
 
-    .legend-swatch {
-        width: 12px;
-        height: 12px;
-        border-radius: 4px;
-        display: inline-block;
-    }
-
-    .legend-swatch.requests { background: rgba(243, 156, 18, 0.85); }
-    .legend-swatch.donations { background: rgba(46, 204, 113, 0.85); }
-    .legend-swatch.rejected { background: rgba(231, 76, 60, 0.85); }
-
-    .stock-rows {
+    .kpi-grid {
         display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 12px;
+    }
+
+    .kpi-card {
+        border: 1px solid #e8edf7;
+        border-radius: 12px;
+        padding: 14px;
+        background: #fbfcff;
+    }
+
+    .kpi-label {
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6b7c93;
+        font-weight: 700;
+        margin-bottom: 6px;
+    }
+
+    .kpi-value {
+        font-size: 1.9rem;
+        font-weight: 700;
+        color: #1f2d3d;
+        line-height: 1;
+    }
+
+    .kpi-note {
+        font-size: 0.82rem;
+        color: #7f8c8d;
+        margin-top: 6px;
+    }
+
+    .stock-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
         gap: 10px;
     }
 
-    .stock-row {
+    .stock-item {
+        border: 1px solid #e8edf7;
+        border-radius: 12px;
+        text-align: center;
+        padding: 12px 10px;
+        background: #fbfcff;
+    }
+
+    .stock-group {
+        font-size: 1rem;
+        font-weight: 800;
+        color: #2c3e50;
+        margin-bottom: 4px;
+    }
+
+    .stock-unit {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #c0392b;
+    }
+
+    .stock-unit-label {
+        font-size: 0.75rem;
+        color: #7f8c8d;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+
+    .actions-grid {
         display: grid;
-        grid-template-columns: 52px 1fr 70px;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 10px;
+    }
+
+    .dashboard-action {
+        display: inline-flex;
+        justify-content: center;
         align-items: center;
-    }
-
-    .stock-label {
-        font-weight: 800;
+        border-radius: 12px;
+        padding: 11px 12px;
+        font-weight: 700;
+        text-decoration: none;
+        border: 1px solid #dfe6f4;
         color: #2c3e50;
-        text-align: right;
+        background: #fff;
     }
 
-    .stock-bar-wrap {
-        height: 12px;
-        border-radius: 999px;
-        background: rgba(226, 232, 240, 0.9);
-        overflow: hidden;
-    }
-
-    .stock-bar {
-        height: 100%;
-        border-radius: 999px;
-        background: rgba(52, 152, 219, 0.65);
-    }
-
-    .stock-value {
-        font-weight: 800;
+    .dashboard-action:hover {
+        text-decoration: none;
+        background: #f7f9ff;
         color: #2c3e50;
-        text-align: left;
     }
 
-    .status-stack {
-        height: 16px;
-        border-radius: 999px;
-        overflow: hidden;
-        display: flex;
-        background: rgba(226, 232, 240, 0.9);
-    }
-
-    .status-seg {
-        height: 100%;
-    }
-
-    .status-seg.approved { background: rgba(46, 204, 113, 0.75); }
-    .status-seg.pending { background: rgba(243, 156, 18, 0.75); }
-    .status-seg.rejected { background: rgba(231, 76, 60, 0.75); }
-    
-    /* Responsive adjustments */
     @media (max-width: 768px) {
-        .blood-card-body {
-            padding: 20px 15px;
-        }
-        
-        .blood-type {
+        .dashboard-header h1 {
             font-size: 1.8rem;
         }
-        
-        .blood-unit, .stats-number {
-            font-size: 2rem;
-        }
-        
-        .stats-icon {
-            font-size: 2.5rem;
-        }
 
-        .mini-bar-chart {
-            height: 140px;
-        }
-
-        .qa-card-body {
-            padding: 18px;
+        .kpi-value {
+            font-size: 1.6rem;
         }
     }
 </style>
@@ -398,373 +148,101 @@
 <div class="admin-dashboard">
     <div class="container">
         <div class="dashboard-header">
-            <h1><i class="fas fa-tachometer-alt"></i> BloodBridge Admin Dashboard</h1>
-            <p>Blood Donation Management Overview</p>
+            <h1><i class="fas fa-tachometer-alt"></i> Admin Dashboard</h1>
+            <p>Essential operational overview</p>
         </div>
 
-        <div class="section-title">
-            <i class="fas fa-chart-line"></i> Quick Analytics (Last 14 Days)
-        </div>
-
-        <div class="row">
-            <div class="col-lg-8">
-                <div class="card blood-card stats-card">
-                    <div class="qa-card-body">
-                        <div class="qa-head">
-                            <div>
-                                <div class="mini-card-title" style="margin-bottom: 4px;">Requests vs Approved Donations</div>
-                                <div class="mini-subtle">Daily activity snapshot (hover bars for exact values)</div>
-                            </div>
-                            <a href="/admin-analytics/" class="qa-link">Analytics</a>
-                        </div>
-
-                        <div class="mini-bar-chart" aria-label="14-day activity chart">
-                            {% for day in dashboard_activity_days %}
-                                <div class="mini-bar-group" title="{{day.label}} • Requests: {{day.requests}} • Donations: {{day.donations}}">
-                                    <div class="mini-bar requests" data-pct="{{ day.requests|percentage:dashboard_activity_max }}"></div>
-                                    <div class="mini-bar donations" data-pct="{{ day.donations|percentage:dashboard_activity_max }}"></div>
-                                </div>
-                            {% endfor %}
-                        </div>
-
-                        <div class="mini-legend">
-                            <span><i class="legend-swatch requests"></i>Requests</span>
-                            <span><i class="legend-swatch donations"></i>Approved Donations</span>
-                        </div>
-                    </div>
+        <div class="section-card">
+            <div class="section-title"><i class="fas fa-chart-bar"></i> Key Metrics</div>
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-label">Total Blood</div>
+                    <div class="kpi-value">{{ totalbloodunit }}</div>
+                    <div class="kpi-note">ml available</div>
                 </div>
-            </div>
-
-            <div class="col-lg-4">
-                <div class="card blood-card stats-card">
-                    <div class="qa-card-body">
-                        <div class="qa-head">
-                            <div>
-                                <div class="mini-card-title" style="margin-bottom: 4px;">Urgent Pending</div>
-                                <div class="mini-subtle">Requests flagged as urgent</div>
-                            </div>
-                            <a href="/admin-request/" class="qa-link">View</a>
-                        </div>
-
-                        <div class="qa-kpi-grid">
-                            <div class="qa-kpi">
-                                <div class="stats-number requests" style="font-size: 2.1rem; margin-bottom: 6px;">{{urgent_pending_count}}</div>
-                                <div class="stats-label">Requests</div>
-                            </div>
-                            <div class="qa-kpi">
-                                <div class="stats-number total" style="font-size: 2.1rem; margin-bottom: 6px;">{{urgent_pending_units}}</div>
-                                <div class="stats-label">Units (ml)</div>
-                            </div>
-                        </div>
-
-                        <div class="qa-actions">
-                            <a href="/admin-analytics/" class="qa-btn">Open full analytics</a>
-                        </div>
-                    </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Pending Requests</div>
+                    <div class="kpi-value">{{ totalpendingrequest }}</div>
+                    <div class="kpi-note">needs review</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Urgent Requests</div>
+                    <div class="kpi-value">{{ urgent_pending_count }}</div>
+                    <div class="kpi-note">{{ urgent_pending_units }} ml urgent</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Approved Requests</div>
+                    <div class="kpi-value">{{ totalapprovedrequest }}</div>
+                    <div class="kpi-note">all-time approved</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Donors</div>
+                    <div class="kpi-value">{{ totaldonors }}</div>
+                    <div class="kpi-note">registered</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Patients</div>
+                    <div class="kpi-value">{{ totalpatients }}</div>
+                    <div class="kpi-note">registered</div>
                 </div>
             </div>
         </div>
 
-        <div class="row qa-row-spacer">
-            <div class="col-lg-6">
-                <div class="card blood-card stats-card">
-                    <div class="qa-card-body">
-                        <div class="mini-card-title">Stock by Blood Group</div>
-                        <div class="stock-rows">
-                            {% for item in dashboard_stock_items %}
-                                <div class="stock-row" title="{{item.bloodgroup}}: {{item.units}} ml">
-                                    <div class="stock-label">{{item.bloodgroup}}</div>
-                                    <div class="stock-bar-wrap">
-                                        <div class="stock-bar" data-pct="{{ item.units|percentage:dashboard_stock_max }}"></div>
-                                    </div>
-                                    <div class="stock-value">{{item.units}}</div>
-                                </div>
-                            {% endfor %}
-                        </div>
-                        <div class="mini-subtle" style="margin-top: 10px;">
-                            Bars are scaled to the max group stock.
-                        </div>
-                    </div>
+        <div class="section-card">
+            <div class="section-title"><i class="fas fa-tint"></i> Blood Stock (All Groups)</div>
+            <div class="stock-grid">
+                <div class="stock-item">
+                    <div class="stock-group">A+</div>
+                    <div class="stock-unit">{{ A1.unit }}</div>
+                    <div class="stock-unit-label">ml</div>
                 </div>
-            </div>
-
-            <div class="col-lg-6">
-                <div class="card blood-card stats-card">
-                    <div class="qa-card-body">
-                        <div class="mini-card-title">Request Status Mix</div>
-                        <div class="status-stack" aria-label="request status mix">
-                            {% for row in dashboard_request_status_items %}
-                                <div class="status-seg {{row.class}}" data-pct="{{ row.count|percentage:dashboard_request_status_total }}" title="{{row.label}}: {{row.count}}"></div>
-                            {% endfor %}
-                        </div>
-                        <div class="mini-legend" style="margin-top: 12px;">
-                            <span><i class="legend-swatch donations"></i>Approved</span>
-                            <span><i class="legend-swatch requests"></i>Pending</span>
-                            <span><i class="legend-swatch rejected"></i>Rejected</span>
-                        </div>
-                        <div class="mini-subtle" style="margin-top: 10px;">
-                            Mix is based on all requests in the system.
-                        </div>
-                    </div>
+                <div class="stock-item">
+                    <div class="stock-group">A-</div>
+                    <div class="stock-unit">{{ A2.unit }}</div>
+                    <div class="stock-unit-label">ml</div>
                 </div>
-            </div>
-        </div>
-
-        <div class="row qa-row-spacer">
-            <div class="col-lg-12">
-                <div class="card blood-card stats-card">
-                    <div class="qa-card-body">
-                        <div class="qa-head">
-                            <div>
-                                <div class="mini-card-title" style="margin-bottom: 4px;">Community Feedback</div>
-                                <div class="mini-subtle">Reply and react with emojis; public items appear on homepage.</div>
-                            </div>
-                            <a href="{% url 'admin-feedback-list' %}" class="qa-link">Manage</a>
-                        </div>
-
-                        <div class="qa-kpi-grid">
-                            <div class="qa-kpi">
-                                <div class="stats-number approved" style="font-size: 2.1rem; margin-bottom: 6px;">{{feedback_total}}</div>
-                                <div class="stats-label">Total</div>
-                            </div>
-                            <div class="qa-kpi">
-                                <div class="stats-number donors" style="font-size: 2.1rem; margin-bottom: 6px;">{{feedback_public}}</div>
-                                <div class="stats-label">Public</div>
-                            </div>
-                        </div>
-
-                        <div class="qa-kpi-grid" style="margin-top: 14px;">
-                            <div class="qa-kpi" style="grid-column: span 2;">
-                                <div class="mini-subtle" style="margin-bottom: 8px; font-weight: 700;">Latest feedback</div>
-                                {% if latest_feedbacks %}
-                                    {% for fb in latest_feedbacks %}
-                                        <div style="padding: 10px 0; border-top: 1px solid rgba(226,232,240,0.85);">
-                                            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-                                                <div style="font-weight: 800; color:#0f172a;">{{ fb.author_label }} • {{ fb.created_at|date:"d M" }}</div>
-                                                <div style="font-weight:800;color:#64748b;">
-                                                    {% star_range as stars %}
-                                                    <span style="color:#f1c40f; letter-spacing:1px;">
-                                                        {% for i in stars %}{% if fb.rating >= i %}★{% else %}☆{% endif %}{% endfor %}
-                                                    </span>
-                                                    {% if fb.admin_reaction %}<span style="margin-left:8px;">{{ fb.admin_reaction }}</span>{% endif %}
-                                                </div>
-                                            </div>
-                                            <div class="mini-subtle" style="margin-top: 6px;">
-                                                {{ fb.message|truncatechars:140 }}
-                                            </div>
-                                        </div>
-                                    {% endfor %}
-                                {% else %}
-                                    <div class="mini-subtle">No feedback yet.</div>
-                                {% endif %}
-                            </div>
-                        </div>
-
-                        <div class="qa-actions">
-                            <a href="{% url 'admin-feedback-list' %}" class="qa-btn">Open feedback inbox</a>
-                        </div>
-                    </div>
+                <div class="stock-item">
+                    <div class="stock-group">B+</div>
+                    <div class="stock-unit">{{ B1.unit }}</div>
+                    <div class="stock-unit-label">ml</div>
+                </div>
+                <div class="stock-item">
+                    <div class="stock-group">B-</div>
+                    <div class="stock-unit">{{ B2.unit }}</div>
+                    <div class="stock-unit-label">ml</div>
+                </div>
+                <div class="stock-item">
+                    <div class="stock-group">AB+</div>
+                    <div class="stock-unit">{{ AB1.unit }}</div>
+                    <div class="stock-unit-label">ml</div>
+                </div>
+                <div class="stock-item">
+                    <div class="stock-group">AB-</div>
+                    <div class="stock-unit">{{ AB2.unit }}</div>
+                    <div class="stock-unit-label">ml</div>
+                </div>
+                <div class="stock-item">
+                    <div class="stock-group">O+</div>
+                    <div class="stock-unit">{{ O1.unit }}</div>
+                    <div class="stock-unit-label">ml</div>
+                </div>
+                <div class="stock-item">
+                    <div class="stock-group">O-</div>
+                    <div class="stock-unit">{{ O2.unit }}</div>
+                    <div class="stock-unit-label">ml</div>
                 </div>
             </div>
         </div>
 
-        <div class="section-title">
-            <i class="fas fa-tint"></i> BloodBridge Inventory Status
-        </div>
-
-        <div class="row">
-            <div class="col-sm-3">
-                <div class="card blood-card positive">
-                    <div class="card-body blood-card-body">
-                        <div class="blood-type">
-                            A+ <i class="fas fa-tint blood-icon"></i>
-                        </div>
-                        <div class="blood-unit">
-                            {{A1.unit}}
-                        </div>
-                        <div class="blood-unit-label">Units Available</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-sm-3">
-                <div class="card blood-card positive">
-                    <div class="card-body blood-card-body">
-                        <div class="blood-type">
-                            B+ <i class="fas fa-tint blood-icon"></i>
-                        </div>
-                        <div class="blood-unit">
-                            {{B1.unit}}
-                        </div>
-                        <div class="blood-unit-label">Units Available</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-sm-3">
-                <div class="card blood-card positive">
-                    <div class="card-body blood-card-body">
-                        <div class="blood-type">
-                            O+ <i class="fas fa-tint blood-icon"></i>
-                        </div>
-                        <div class="blood-unit">
-                            {{O1.unit}}
-                        </div>
-                        <div class="blood-unit-label">Units Available</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-sm-3">
-                <div class="card blood-card positive">
-                    <div class="card-body blood-card-body">
-                        <div class="blood-type">
-                            AB+ <i class="fas fa-tint blood-icon"></i>
-                        </div>
-                        <div class="blood-unit">
-                            {{AB1.unit}}
-                        </div>
-                        <div class="blood-unit-label">Units Available</div>
-                    </div>
-                </div>
+        <div class="section-card">
+            <div class="section-title"><i class="fas fa-bolt"></i> Quick Actions</div>
+            <div class="actions-grid">
+                <a class="dashboard-action" href="/admin-request/">Review Blood Requests</a>
+                <a class="dashboard-action" href="/admin-donation/">Review Donations</a>
+                <a class="dashboard-action" href="/admin-blood/">Update Blood Stock</a>
             </div>
         </div>
-
-        <div class="row">
-            <div class="col-sm-3">
-                <div class="card blood-card negative">
-                    <div class="card-body blood-card-body">
-                        <div class="blood-type">
-                            A- <i class="fas fa-tint blood-icon"></i>
-                        </div>
-                        <div class="blood-unit">
-                            {{A2.unit}}
-                        </div>
-                        <div class="blood-unit-label">Units Available</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-sm-3">
-                <div class="card blood-card negative">
-                    <div class="card-body blood-card-body">
-                        <div class="blood-type">
-                            B- <i class="fas fa-tint blood-icon"></i>
-                        </div>
-                        <div class="blood-unit">
-                            {{B2.unit}}
-                        </div>
-                        <div class="blood-unit-label">Units Available</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-sm-3">
-                <div class="card blood-card negative">
-                    <div class="card-body blood-card-body">
-                        <div class="blood-type">
-                            O- <i class="fas fa-tint blood-icon"></i>
-                        </div>
-                        <div class="blood-unit">
-                            {{O2.unit}}
-                        </div>
-                        <div class="blood-unit-label">Units Available</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-sm-3">
-                <div class="card blood-card negative">
-                    <div class="card-body blood-card-body">
-                        <div class="blood-type">
-                            AB- <i class="fas fa-tint blood-icon"></i>
-                        </div>
-                        <div class="blood-unit">
-                            {{AB2.unit}}
-                        </div>
-                        <div class="blood-unit-label">Units Available</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <hr class="section-divider">
-
-        <div class="section-title">
-            <i class="fas fa-chart-bar"></i> System Statistics
-        </div>
-
-        <div class="row">
-            <div class="col-sm-3">
-                <div class="card blood-card stats-card">
-                    <div class="card-body blood-card-body">
-                        <div class="stats-icon donors">
-                            <i class="fas fa-users"></i>
-                        </div>
-                        <div class="stats-number donors">
-                            {{totaldonors}}
-                        </div>
-                        <div class="stats-label">Total Donors</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-sm-3">
-                <div class="card blood-card stats-card">
-                    <div class="card-body blood-card-body">
-                        <div class="stats-icon requests">
-                            <i class="fas fa-clipboard-list"></i>
-                        </div>
-                        <div class="stats-number requests">
-                            {{totalrequest}}
-                        </div>
-                        <div class="stats-label">Total Requests</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-sm-3">
-                <div class="card blood-card stats-card">
-                    <div class="card-body blood-card-body">
-                        <div class="stats-icon approved">
-                            <i class="far fa-check-circle"></i>
-                        </div>
-                        <div class="stats-number approved">
-                            {{totalapprovedrequest}}
-                        </div>
-                        <div class="stats-label">Approved Requests</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-sm-3">
-                <div class="card blood-card stats-card">
-                    <div class="card-body blood-card-body">
-                        <div class="stats-icon total">
-                            <i class="fas fa-tint"></i>
-                        </div>
-                        <div class="stats-number total">
-                            {{totalbloodunit}}
-                        </div>
-                        <div class="stats-label">Total Blood Unit (ml)</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-
     </div>
 </div>
 
 {% endblock content %}
-
-{% block extra_scripts %}
-<script>
-    (function() {
-        document.querySelectorAll('[data-pct]').forEach(function(el) {
-            const raw = el.getAttribute('data-pct');
-            const pct = Number(raw);
-            if (!Number.isFinite(pct)) {
-                return;
-            }
-
-            if (el.classList.contains('mini-bar')) {
-                el.style.height = pct + '%';
-            } else {
-                el.style.width = pct + '%';
-            }
-        });
-    })();
-</script>
-{% endblock %}

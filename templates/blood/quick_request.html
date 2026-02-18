@@ -4,6 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#e74c3c">
+    <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
     <title>Quick Blood Request - BloodBridge</title>
     
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
@@ -212,6 +214,19 @@
             margin-bottom: 10px;
         }
 
+        .offline-note {
+            margin-top: 12px;
+            background: #eef2ff;
+            color: #3730a3;
+            border: 1px solid #c7d2fe;
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .offline-note.show { display: block; }
+
         /* Responsive Design */
         @media (max-width: 768px) {
             .quick-request-container {
@@ -374,6 +389,11 @@
                     </button>
                 </form>
 
+                <div id="offlineNote" class="offline-note">
+                    <i class="fas fa-wifi"></i>
+                    Offline mode: if internet drops, your request is saved locally and auto-submitted when back online.
+                </div>
+
                 <div style="text-align: center; margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 10px;">
                     <p style="margin: 0; color: #7f8c8d;">Have an account? <a href="/patient/patientlogin/" style="color: #e74c3c; font-weight: 600;">Login here</a> | <a href="/patient/patientsignup/" style="color: #e74c3c; font-weight: 600;">Create account</a></p>
                 </div>
@@ -387,6 +407,91 @@
         document.addEventListener('DOMContentLoaded', function() {
             const form = document.getElementById('quickRequestForm');
             const submitBtn = document.getElementById('submitBtn');
+            const offlineNote = document.getElementById('offlineNote');
+            const OFFLINE_QUEUE_KEY = 'bloodbridge.quickRequestQueue';
+
+            function getCookie(name) {
+                const cookieValue = document.cookie
+                    .split('; ')
+                    .find(row => row.startsWith(name + '='));
+                return cookieValue ? decodeURIComponent(cookieValue.split('=')[1]) : '';
+            }
+
+            function getQueue() {
+                try {
+                    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
+                    return raw ? JSON.parse(raw) : [];
+                } catch (_) {
+                    return [];
+                }
+            }
+
+            function setQueue(items) {
+                localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(items));
+            }
+
+            function collectPayload() {
+                const formData = new FormData(form);
+                const payload = {};
+                formData.forEach((value, key) => {
+                    payload[key] = value;
+                });
+                return payload;
+            }
+
+            async function flushQueue() {
+                if (!navigator.onLine) return;
+                const queue = getQueue();
+                if (!queue.length) return;
+
+                const csrfToken = getCookie('csrftoken') || form.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
+                const remaining = [];
+
+                for (const item of queue) {
+                    try {
+                        const body = new URLSearchParams(item.payload || {});
+                        if (!body.get('csrfmiddlewaretoken') && csrfToken) {
+                            body.set('csrfmiddlewaretoken', csrfToken);
+                        }
+
+                        const response = await fetch(window.location.pathname, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'X-CSRFToken': csrfToken,
+                            },
+                            body: body.toString(),
+                            credentials: 'same-origin',
+                        });
+
+                        if (!response.ok) {
+                            remaining.push(item);
+                        }
+                    } catch (_) {
+                        remaining.push(item);
+                    }
+                }
+
+                setQueue(remaining);
+            }
+
+            function queueOfflineRequest() {
+                const queue = getQueue();
+                queue.push({
+                    payload: collectPayload(),
+                    queuedAt: new Date().toISOString(),
+                });
+                setQueue(queue);
+            }
+
+            function updateOfflineNote() {
+                if (!offlineNote) return;
+                if (!navigator.onLine || getQueue().length > 0) {
+                    offlineNote.classList.add('show');
+                } else {
+                    offlineNote.classList.remove('show');
+                }
+            }
             
             // Form validation
             form.addEventListener('submit', function(e) {
@@ -405,6 +510,14 @@
                 if (!isValid) {
                     e.preventDefault();
                     alert('Please fill in all required fields.');
+                    return;
+                }
+
+                if (!navigator.onLine) {
+                    e.preventDefault();
+                    queueOfflineRequest();
+                    updateOfflineNote();
+                    alert('You are offline. Request saved locally and will auto-submit when internet returns.');
                     return;
                 }
                 
@@ -430,6 +543,21 @@
                     }
                 });
             });
+
+            window.addEventListener('online', function() {
+                flushQueue().finally(updateOfflineNote);
+            });
+
+            window.addEventListener('offline', updateOfflineNote);
+
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/service-worker.js').catch(function() {});
+                });
+            }
+
+            updateOfflineNote();
+            flushQueue();
         });
     </script>
 </body>

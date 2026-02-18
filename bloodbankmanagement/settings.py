@@ -11,27 +11,48 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 from pathlib import Path
+import sys
 import os
+from django.core.exceptions import ImproperlyConfigured
 
 import dj_database_url
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env for local/dev reliability.
+load_dotenv(BASE_DIR / '.env')
+
+# Optional local overrides (ignored by git). Useful when `.env` is production.
+load_dotenv(BASE_DIR / '.env.local', override=True)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-xp^wz=i&8%o*%@2)7#k-7w7fhxcxgxq(4kw)nkc$#oj&6d^xp9')
+DEFAULT_SECRET_KEY = 'django-insecure-xp^wz=i&8%o*%@2)7#k-7w7fhxcxgxq(4kw)nkc$#oj&6d^xp9'
+SECRET_KEY = os.getenv('SECRET_KEY', DEFAULT_SECRET_KEY)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
+
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'development').strip().lower()
+IS_PRODUCTION = ENVIRONMENT in {'production', 'prod'}
 
 ALLOWED_HOSTS = [
     host.strip()
     for host in os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost,testserver').split(',')
     if host.strip()
 ]
+
+if IS_PRODUCTION:
+    if DEBUG:
+        raise ImproperlyConfigured('DEBUG must be False when ENVIRONMENT=production.')
+    if SECRET_KEY == DEFAULT_SECRET_KEY or SECRET_KEY.startswith('django-insecure-'):
+        raise ImproperlyConfigured('Set a strong SECRET_KEY for production environment.')
+    if not ALLOWED_HOSTS:
+        raise ImproperlyConfigured('ALLOWED_HOSTS must be configured for production environment.')
 
 
 # Application definition
@@ -138,10 +159,26 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
+
+# In production we prefer WhiteNoise + hashed manifest files.
+# However, if the staticfiles manifest doesn't exist yet (common in local runs
+# when `.env` is set to production), fall back to non-manifest storage so
+# `{% static %}` can still resolve assets like the homepage background.
+_static_manifest_path = STATIC_ROOT / 'staticfiles.json'
+_running_collectstatic = len(sys.argv) > 1 and sys.argv[1] == 'collectstatic'
+USE_MANIFEST_STATICFILES = IS_PRODUCTION and (_running_collectstatic or _static_manifest_path.exists())
+
+STATICFILES_STORAGE = (
+    'whitenoise.storage.CompressedManifestStaticFilesStorage'
+    if USE_MANIFEST_STATICFILES
+    else 'django.contrib.staticfiles.storage.StaticFilesStorage'
+)
+
+# When not using the manifest storage, let WhiteNoise resolve files via finders.
+WHITENOISE_USE_FINDERS = not USE_MANIFEST_STATICFILES
 
 # Media files
 MEDIA_URL = '/media/'
@@ -182,21 +219,36 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 # Logging configuration
 # NOTE: SQL logging is very noisy; keep it opt-in.
 LOG_SQL = os.getenv('LOG_SQL', 'false').lower() == 'true'
+LOG_TO_FILE = os.getenv('LOG_TO_FILE', 'false').lower() == 'true'
+LOG_FILE_PATH = os.getenv('LOG_FILE_PATH', str(BASE_DIR / 'logs' / 'django.log'))
+
+if LOG_TO_FILE:
+    os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+
+logging_handlers = {
+    'console': {
+        'class': 'logging.StreamHandler',
+    },
+}
+
+if LOG_TO_FILE:
+    logging_handlers['file'] = {
+        'class': 'logging.FileHandler',
+        'filename': LOG_FILE_PATH,
+        'level': 'INFO',
+    }
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-        },
-    },
+    'handlers': logging_handlers,
     'root': {
-        'handlers': ['console'],
+        'handlers': ['console'] + (['file'] if LOG_TO_FILE else []),
         'level': 'INFO',
     },
     'loggers': {
         'django.db.backends': {
-            'handlers': ['console'],
+            'handlers': ['console'] + (['file'] if LOG_TO_FILE else []),
             'level': 'DEBUG' if LOG_SQL else 'INFO',
             'propagate': False,
         },
@@ -221,7 +273,8 @@ AWS_SNS_ENABLED = os.getenv('AWS_SNS_ENABLED', 'false').lower() == 'true'
 AWS_SNS_REGION = os.getenv('AWS_SNS_REGION', 'ap-south-1')
 AWS_SNS_DEFAULT_COUNTRY_CODE = os.getenv('AWS_SNS_DEFAULT_COUNTRY_CODE', '+91')
 AWS_SNS_SENDER_ID = os.getenv('AWS_SNS_SENDER_ID', None)
-AWS_SNS_MAX_RECIPIENTS = int(os.getenv('AWS_SNS_MAX_RECIPIENTS', '25'))
+# 0 means unlimited recipients per urgent broadcast.
+AWS_SNS_MAX_RECIPIENTS = int(os.getenv('AWS_SNS_MAX_RECIPIENTS', '0'))
 AWS_SNS_MIN_NOTIFICATION_GAP_SECONDS = int(os.getenv('AWS_SNS_MIN_NOTIFICATION_GAP_SECONDS', '1800'))
 AWS_SNS_SMS_TYPE = os.getenv('AWS_SNS_SMS_TYPE', 'Transactional')
 
@@ -246,7 +299,9 @@ else:
 # Default: hidden to avoid noisy warnings in local setups without Redis.
 ADMIN_SHOW_SMS_MODE_BANNER = os.getenv('ADMIN_SHOW_SMS_MODE_BANNER', 'false').lower() == 'true'
 
-if not DEBUG:
+FORCE_HTTPS = os.getenv('FORCE_HTTPS', 'true' if IS_PRODUCTION else 'false').lower() == 'true'
+
+if (IS_PRODUCTION or not DEBUG) and FORCE_HTTPS:
     # When running behind a proxy (Cloud Run, load balancers), respect forwarded HTTPS scheme.
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
