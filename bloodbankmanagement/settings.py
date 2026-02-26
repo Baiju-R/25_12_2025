@@ -273,10 +273,29 @@ AWS_SNS_ENABLED = os.getenv('AWS_SNS_ENABLED', 'false').lower() == 'true'
 AWS_SNS_REGION = os.getenv('AWS_SNS_REGION', 'ap-south-1')
 AWS_SNS_DEFAULT_COUNTRY_CODE = os.getenv('AWS_SNS_DEFAULT_COUNTRY_CODE', '+91')
 AWS_SNS_SENDER_ID = os.getenv('AWS_SNS_SENDER_ID', None)
+# In India (+91), SenderID often requires DLT registration; using an unregistered
+# sender can lead to silent non-delivery even when SNS returns a MessageId.
+# Default: ignore AWS_SNS_SENDER_ID unless explicitly allowed.
+AWS_SNS_ALLOW_SENDER_ID = os.getenv('AWS_SNS_ALLOW_SENDER_ID', 'false').lower() == 'true'
+if (not AWS_SNS_ALLOW_SENDER_ID) and str(AWS_SNS_DEFAULT_COUNTRY_CODE).strip().startswith('+91'):
+    AWS_SNS_SENDER_ID = None
 # 0 means unlimited recipients per urgent broadcast.
 AWS_SNS_MAX_RECIPIENTS = int(os.getenv('AWS_SNS_MAX_RECIPIENTS', '0'))
 AWS_SNS_MIN_NOTIFICATION_GAP_SECONDS = int(os.getenv('AWS_SNS_MIN_NOTIFICATION_GAP_SECONDS', '1800'))
 AWS_SNS_SMS_TYPE = os.getenv('AWS_SNS_SMS_TYPE', 'Transactional')
+
+# When True (dev default), OTP codes and welcome messages are printed to the
+# server console if the SMS provider fails or is disabled.  The OTP is also
+# shown in the browser flash message so developers can test without real SMS.
+SMS_CONSOLE_FALLBACK = os.getenv('SMS_CONSOLE_FALLBACK', str(DEBUG)).lower() == 'true'
+
+# ─── Amazon SageMaker Donor Recommendation AI ────────────────────────────────
+# When enabled, the donor recommendation page calls a SageMaker endpoint to
+# produce an ML-driven score (0–100) for each donor. When disabled or unreachable,
+# the system falls back to a deterministic heuristic that mimics the model weights.
+SAGEMAKER_ENDPOINT_ENABLED = os.getenv('SAGEMAKER_ENDPOINT_ENABLED', 'false').lower() == 'true'
+SAGEMAKER_ENDPOINT_NAME = os.getenv('SAGEMAKER_ENDPOINT_NAME', 'bloodbridge-donor-recommender')
+SAGEMAKER_REGION = os.getenv('SAGEMAKER_REGION', os.getenv('AWS_SNS_REGION', 'ap-south-1'))
 
 # Celery (background jobs)
 # Recommended broker: Redis. On Windows, run workers with --pool=solo.

@@ -3,6 +3,7 @@ version: "3.9"
 services:
   web:
     build: .
+    restart: unless-stopped
     ports:
       - "80:8080"
     env_file:
@@ -18,7 +19,7 @@ services:
       GUNICORN_TIMEOUT: "180"
       # If you aren't running Redis/Celery worker, keep demo mode
       CELERY_TASK_ALWAYS_EAGER: "true"
-      AWS_SNS_ENABLED: "false"
+      # SMS is controlled via .env (AWS_SNS_ENABLED=true/false)
     volumes:
       # Persistent SQLite DB
       - ./data:/data

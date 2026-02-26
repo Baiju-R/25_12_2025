@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
 from .models import Patient
 from blood.utils.phone import normalize_phone_number
 
@@ -10,6 +11,11 @@ class PatientUserForm(forms.ModelForm):
         widgets = {
             'password': forms.PasswordInput()
         }
+
+    def clean_password(self):
+        password = self.cleaned_data.get('password')
+        validate_password(password)
+        return password
 
 class PatientForm(forms.ModelForm):
     BLOOD_GROUP_CHOICES = [

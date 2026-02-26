@@ -104,6 +104,25 @@
 			</div>
 
 			<div class="quick-actions" style="margin-top:20px;">
+				<h4 style="margin-bottom:12px"><i class="fas fa-bell"></i> Notifications</h4>
+				{% if notifications %}
+					<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+						{% for note in notifications %}
+							<div style="background:rgba(255,255,255,0.98);border:1px solid rgba(226,232,240,0.9);border-radius:14px;padding:12px;">
+								<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+									<div style="font-weight:900;color:#0f172a;">{{ note.title|default:"Notification" }}</div>
+									<div style="font-weight:800;color:#64748b;">{{ note.created_at|date:"d M Y" }}</div>
+								</div>
+								<div style="margin-top:8px;color:#334155;white-space:pre-wrap;">{{ note.message|truncatechars:220 }}</div>
+							</div>
+						{% endfor %}
+					</div>
+				{% else %}
+					<div style="background:rgba(255,255,255,0.95);border-radius:14px;padding:12px;color:#64748b;">No notifications yet.</div>
+				{% endif %}
+			</div>
+
+			<div class="quick-actions" style="margin-top:20px;">
 				<h4 style="margin-bottom:12px"><i class="fas fa-shield-alt"></i> Verification Badge</h4>
 				{% if verification_badge %}
 					<div style="background:#f8fafc;border-radius:12px;padding:14px;color:#1f2937;">

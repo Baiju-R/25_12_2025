@@ -38,7 +38,10 @@
 			<a class="navbar-brand" href="/"><i class="fas fa-heartbeat mr-2"></i>BloodBridge Patient</a>
 			<div class="ml-auto d-flex align-items-center">
 				<a class="nav-link text-white" href="{% url 'patient-dashboard' %}"><i class="fas fa-tachometer-alt"></i> <span class="d-none d-sm-inline">Dashboard</span></a>
-				<a class="nav-link text-white" href="/logout/"><i class="fas fa-sign-out-alt"></i> <span class="d-none d-sm-inline">Logout</span></a>
+				<form method="post" action="/logout/" style="display:inline">
+					{% csrf_token %}
+					<button type="submit" class="nav-link text-white btn btn-link" style="cursor:pointer"><i class="fas fa-sign-out-alt"></i> <span class="d-none d-sm-inline">Logout</span></button>
+				</form>
 			</div>
 		</div>
 	</nav>

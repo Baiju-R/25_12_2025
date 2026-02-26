@@ -156,6 +156,24 @@
         color: white;
         box-shadow: 0 4px 15px rgba(149, 165, 166, 0.3);
     }
+
+    /* Efficiency gauge */
+    .eff-gauge {
+        position: relative; width: 52px; height: 52px; margin: 0 auto;
+    }
+    .eff-gauge-svg {
+        width: 52px; height: 52px; transform: rotate(-90deg);
+    }
+    .eff-gauge-label {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        font-size: 0.72rem; font-weight: 700;
+    }
+    .eff-high-ring  { stroke: #27ae60; }
+    .eff-medium-ring { stroke: #f39c12; }
+    .eff-low-ring   { stroke: #e74c3c; }
+    .eff-high-text  { color: #27ae60; }
+    .eff-medium-text { color: #f39c12; }
+    .eff-low-text   { color: #e74c3c; }
     
     .blood-group-badge {
         background: linear-gradient(45deg, #e74c3c, #c0392b);
@@ -380,6 +398,7 @@
                             <th scope="col"><i class="fas fa-clock"></i> Date</th>
                             <th scope="col"><i class="fas fa-user-tag"></i> Requested By</th>
                             <th scope="col"><i class="fas fa-info-circle"></i> Status</th>
+                            <th scope="col"><i class="fas fa-chart-line"></i> Efficiency</th>
                             <th scope="col"><i class="fas fa-warehouse"></i> Stock Impact</th>
                         </tr>
                     </thead>
@@ -418,6 +437,20 @@
                                         <i class="fas fa-times-circle"></i> Rejected
                                     </span>
                                 {% endif %}
+                            </td>
+                            <td style="text-align:center;">
+                                <div class="eff-gauge">
+                                    <svg viewBox="0 0 36 36" class="eff-gauge-svg">
+                                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#eee" stroke-width="3"/>
+                                        <circle cx="18" cy="18" r="15.9" fill="none"
+                                            class="eff-ring {{ blood_request.efficiency_css }}-ring"
+                                            stroke-width="3" stroke-dasharray="{{ blood_request.efficiency_score|floatformat:0 }}, 100"
+                                            stroke-linecap="round"/>
+                                    </svg>
+                                    <span class="eff-gauge-label {{ blood_request.efficiency_css }}-text">
+                                        {{ blood_request.efficiency_score|floatformat:0 }}
+                                    </span>
+                                </div>
                             </td>
                             <td>
                                 {% if blood_request.status == 'Approved' %}

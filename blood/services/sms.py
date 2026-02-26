@@ -461,6 +461,15 @@ def _extract_contact_number_from_reason(reason: str) -> Optional[str]:
 
 def _build_patient_approved_message(blood_request, top_rec) -> str:
 	patient_name = blood_request.patient_name
+	# For +91 routes (DLT filtering), keep transactional templates short and avoid
+	# embedding phone numbers/addresses in SMS.
+	is_india = str(getattr(settings, 'AWS_SNS_DEFAULT_COUNTRY_CODE', '') or '').strip().startswith('+91')
+	if is_india:
+		return (
+			f"BloodBridge: Request {blood_request.id} approved for {blood_request.bloodgroup} "
+			f"{blood_request.unit}ml. Login for details."
+		)[:1200]
+
 	base = (
 		f"BloodBridge Update: Your request #{blood_request.id} for {blood_request.bloodgroup} "
 		f"({blood_request.unit}ml) has been approved, {patient_name}."
@@ -469,21 +478,25 @@ def _build_patient_approved_message(blood_request, top_rec) -> str:
 		return f"{base} Our team will contact you with donor details shortly."[:1200]
 
 	donor = top_rec.donor
-	phone = _normalize_phone_number(getattr(donor, "mobile", None)) or "N/A"
-	address = getattr(donor, "address", "") or "N/A"
 	availability = "Available" if donor.is_available else "Unavailable"
 	message = (
 		f"{base} "
 		f"Top matched donor: {donor.get_name} ({donor.bloodgroup}). "
-		f"Phone: {phone}. Address: {address}. Status: {availability}. "
+		f"Status: {availability}. "
 		f"Recommendation score: {top_rec.score:.1f}."
 	)
 	return message[:1200]
 
 
 def _build_donor_approved_message(blood_request, top_rec) -> str:
-	donor = top_rec.donor
-	patient_contact = _resolve_contact_number(blood_request, None) or "N/A"
+	# Keep India template short to improve deliverability.
+	is_india = str(getattr(settings, 'AWS_SNS_DEFAULT_COUNTRY_CODE', '') or '').strip().startswith('+91')
+	if is_india:
+		return (
+			f"BloodBridge: Match for approved request {blood_request.id} "
+			f"({blood_request.bloodgroup} {blood_request.unit}ml). Login to coordinate."
+		)[:1200]
+
 	reason = (blood_request.reason or "").split("\n", 1)[0].strip()
 	if reason:
 		reason = f" Reason: {reason}."
@@ -491,13 +504,20 @@ def _build_donor_approved_message(blood_request, top_rec) -> str:
 		"BloodBridge Alert: You are the top recommended donor for an approved request. "
 		f"Patient: {blood_request.patient_name}, Age: {blood_request.patient_age}, "
 		f"Blood: {blood_request.bloodgroup}, Units: {blood_request.unit}ml."
-		f" Contact: {patient_contact}.{reason}"
+		f"{reason}"
 		" Please coordinate with the patient or admin promptly."
 	)
 	return message[:1200]
 
 
 def _build_patient_rejected_message(blood_request, reason: Optional[str]) -> str:
+	is_india = str(getattr(settings, 'AWS_SNS_DEFAULT_COUNTRY_CODE', '') or '').strip().startswith('+91')
+	if is_india:
+		return (
+			f"BloodBridge: Request {blood_request.id} rejected for {blood_request.bloodgroup} "
+			f"{blood_request.unit}ml. Login for details."
+		)[:1200]
+
 	patient_name = blood_request.patient_name
 	rejection_reason = reason or "Request could not be fulfilled at this time."
 	message = (
@@ -509,6 +529,12 @@ def _build_patient_rejected_message(blood_request, reason: Optional[str]) -> str
 
 
 def _build_donation_approved_message(donation) -> str:
+	is_india = str(getattr(settings, 'AWS_SNS_DEFAULT_COUNTRY_CODE', '') or '').strip().startswith('+91')
+	if is_india:
+		return (
+			f"BloodBridge: Donation {donation.id} approved ({donation.bloodgroup} {donation.unit}ml). Thank you."
+		)[:1200]
+
 	message = (
 		f"BloodBridge Update: Your blood donation #{donation.id} of {donation.unit}ml "
 		f"({donation.bloodgroup}) has been approved. Thank you for saving lives!"
@@ -517,6 +543,12 @@ def _build_donation_approved_message(donation) -> str:
 
 
 def _build_donation_rejected_message(donation, reason: Optional[str]) -> str:
+	is_india = str(getattr(settings, 'AWS_SNS_DEFAULT_COUNTRY_CODE', '') or '').strip().startswith('+91')
+	if is_india:
+		return (
+			f"BloodBridge: Donation {donation.id} rejected ({donation.bloodgroup} {donation.unit}ml). Login for details."
+		)[:1200]
+
 	rejection_reason = reason or "Donation could not be accepted at this time."
 	message = (
 		f"BloodBridge Update: Your blood donation #{donation.id} of {donation.unit}ml "
@@ -524,4 +556,131 @@ def _build_donation_rejected_message(donation, reason: Optional[str]) -> str:
 		"Thank you for your willingness to help."
 	)
 	return message[:1200]
+
+
+# ---------------------------------------------------------------------------
+# Welcome SMS on account creation
+# ---------------------------------------------------------------------------
+
+def send_welcome_sms(
+	phone: Optional[str],
+	first_name: str,
+	role: str,
+	*,
+	sms_sender=send_single_sms,
+):
+	"""Send a welcome SMS to a newly registered donor or patient."""
+
+	if not phone:
+		return {'status': 'skipped', 'reason': 'no-phone'}
+
+	normalized = _normalize_phone_number(phone)
+	if not normalized:
+		return {'status': 'skipped', 'reason': 'invalid-phone'}
+
+	message = _build_welcome_message(first_name, role)
+
+	if not settings.AWS_SNS_ENABLED:
+		logger.info("AWS SNS disabled; skipping welcome SMS for %s (%s)", first_name, role)
+		if getattr(settings, 'SMS_CONSOLE_FALLBACK', False):
+			print(f"\n{'='*60}")
+			print(f"  WELCOME SMS (console fallback)")
+			print(f"  To:   {normalized}")
+			print(f"  Body: {message}")
+			print(f"{'='*60}\n")
+			return {'status': 'console-fallback', 'reason': 'sns-disabled', 'message': message}
+		return {'status': 'skipped', 'reason': 'sns-disabled'}
+
+	try:
+		response = sms_sender(normalized, message)
+		if response.get('status') == 'success':
+			return response
+		logger.error("Welcome SMS failed for %s (%s): %s", first_name, role, response)
+		if getattr(settings, 'SMS_CONSOLE_FALLBACK', False):
+			print(f"\n{'='*60}")
+			print(f"  WELCOME SMS (console fallback - provider failed)")
+			print(f"  To:   {normalized}")
+			print(f"  Body: {message}")
+			print(f"  Error: {response}")
+			print(f"{'='*60}\n")
+			return {'status': 'console-fallback', 'reason': 'provider-error', 'message': message}
+		return response
+	except Exception as exc:
+		logger.error("Error sending welcome SMS for %s (%s): %s", first_name, role, exc)
+		return {'status': 'error', 'reason': str(exc)}
+
+
+def _build_welcome_message(first_name: str, role: str) -> str:
+	is_india = str(getattr(settings, 'AWS_SNS_DEFAULT_COUNTRY_CODE', '') or '').strip().startswith('+91')
+	if is_india:
+		return (
+			f"BloodBridge: Welcome {first_name}! Your {role.lower()} account is active. "
+			f"Login to get started."
+		)[:160]
+
+	return (
+		f"Welcome to BloodBridge, {first_name}! Your {role.lower()} account has been "
+		f"created successfully. Log in to your dashboard to get started. "
+		f"Thank you for joining our life-saving community!"
+	)[:1200]
+
+
+# ---------------------------------------------------------------------------
+# OTP SMS for forgot-password
+# ---------------------------------------------------------------------------
+
+def send_otp_sms(
+	phone: Optional[str],
+	otp_code: str,
+	*,
+	sms_sender=send_single_sms,
+):
+	"""Send an OTP code for password reset."""
+
+	if not phone:
+		return {'status': 'skipped', 'reason': 'no-phone'}
+
+	normalized = _normalize_phone_number(phone)
+	if not normalized:
+		return {'status': 'skipped', 'reason': 'invalid-phone'}
+
+	message = _build_otp_message(otp_code)
+
+	if not settings.AWS_SNS_ENABLED:
+		logger.info("AWS SNS disabled; skipping OTP SMS to %s", normalized)
+		if getattr(settings, 'SMS_CONSOLE_FALLBACK', False):
+			print(f"\n{'='*60}")
+			print(f"  OTP SMS (console fallback)")
+			print(f"  To:   {normalized}")
+			print(f"  OTP:  {otp_code}")
+			print(f"  Body: {message}")
+			print(f"{'='*60}\n")
+			return {'status': 'console-fallback', 'reason': 'sns-disabled', 'otp': otp_code}
+		return {'status': 'skipped', 'reason': 'sns-disabled'}
+
+	try:
+		response = sms_sender(normalized, message)
+		if response.get('status') == 'success':
+			return response
+		logger.error("OTP SMS failed to %s: %s", normalized, response)
+		if getattr(settings, 'SMS_CONSOLE_FALLBACK', False):
+			print(f"\n{'='*60}")
+			print(f"  OTP SMS (console fallback - provider failed)")
+			print(f"  To:   {normalized}")
+			print(f"  OTP:  {otp_code}")
+			print(f"  Body: {message}")
+			print(f"  Error: {response}")
+			print(f"{'='*60}\n")
+			return {'status': 'console-fallback', 'reason': 'provider-error', 'otp': otp_code}
+		return response
+	except Exception as exc:
+		logger.error("Error sending OTP SMS to %s: %s", normalized, exc)
+		return {'status': 'error', 'reason': str(exc)}
+
+
+def _build_otp_message(otp_code: str) -> str:
+	return (
+		f"BloodBridge: Your password reset OTP is {otp_code}. "
+		f"Valid for 10 minutes. Do not share this code."
+	)[:160]
 

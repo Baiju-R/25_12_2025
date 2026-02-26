@@ -77,6 +77,11 @@ urlpatterns = [
     path('test-sms/', blood_views.test_sms, name='test-sms'),
     path('service-worker.js', blood_views.service_worker_js_view, name='service-worker-js'),
 
+    # Forgot-password / password-reset (SMS OTP)
+    path('forgot-password/<str:role>/', blood_views.forgot_password_view, name='forgot-password'),
+    path('verify-otp/<str:role>/', blood_views.verify_otp_view, name='verify-otp'),
+    path('reset-password/<str:role>/', blood_views.reset_password_view, name='reset-password'),
+
     # App URLs using include
     path('donor/', include('donor.urls')),
     path('patient/', include('patient.urls')),

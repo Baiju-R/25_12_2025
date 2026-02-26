@@ -383,6 +383,76 @@
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
+
+    /* Priority indicator badges */
+    .priority-badge {
+        padding: 5px 12px;
+        border-radius: 12px;
+        font-weight: 700;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+    }
+    .priority-critical {
+        background: linear-gradient(135deg, #dc2626, #991b1b);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(220, 38, 38, 0.45);
+        animation: pulse-critical 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-critical {
+        0%, 100% { box-shadow: 0 2px 8px rgba(220, 38, 38, 0.45); }
+        50% { box-shadow: 0 2px 16px rgba(220, 38, 38, 0.7); }
+    }
+    .priority-high {
+        background: linear-gradient(135deg, #ea580c, #c2410c);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(234, 88, 12, 0.35);
+    }
+    .priority-medium {
+        background: linear-gradient(135deg, #d97706, #b45309);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(217, 119, 6, 0.3);
+    }
+    .priority-low {
+        background: linear-gradient(135deg, #059669, #047857);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+    }
+    .priority-score-num {
+        font-size: 0.7rem;
+        opacity: 0.85;
+        margin-left: 2px;
+    }
+
+    /* Stock level indicators */
+    .stock-indicator {
+        padding: 4px 10px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 0.8rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .stock-ok { background: #d1fae5; color: #065f46; }
+    .stock-limited { background: #fef3c7; color: #92400e; }
+    .stock-low { background: #fed7aa; color: #9a3412; }
+    .stock-empty { background: #fee2e2; color: #991b1b; }
+    .stock-units-num {
+        font-weight: 700;
+        font-family: monospace;
+        font-size: 0.85rem;
+    }
+    .days-badge {
+        display: inline-block;
+        font-size: 0.72rem;
+        color: #64748b;
+        margin-top: 2px;
+    }
 </style>
 
 <div class="request-dashboard">
@@ -420,6 +490,8 @@
                             <th scope="col"><i class="fas fa-stethoscope"></i> Reason</th>
                             <th scope="col"><i class="fas fa-tint"></i> Blood Group</th>
                             <th scope="col"><i class="fas fa-flask"></i> Unit (ml)</th>
+                            <th scope="col"><i class="fas fa-exclamation-triangle"></i> Priority</th>
+                            <th scope="col"><i class="fas fa-warehouse"></i> Stock Level</th>
                             <th scope="col"><i class="fas fa-clock"></i> Request Date</th>
                             <th scope="col"><i class="fas fa-user-tag"></i> Requested By</th>
                             <th scope="col"><i class="fas fa-info-circle"></i> Status</th>
@@ -435,6 +507,30 @@
                             <td class="reason-display">{{ blood_request.reason|truncatechars:50 }}</td>
                             <td><span class="blood-group-badge">{{ blood_request.bloodgroup }}</span></td>
                             <td class="unit-display">{{ blood_request.unit }} ml</td>
+                            <td style="text-align:center;">
+                                <span class="priority-badge {{ blood_request.priority_css }}">
+                                    {% if blood_request.priority_css == 'priority-critical' %}
+                                        <i class="fas fa-bolt"></i>
+                                    {% elif blood_request.priority_css == 'priority-high' %}
+                                        <i class="fas fa-arrow-up"></i>
+                                    {% elif blood_request.priority_css == 'priority-medium' %}
+                                        <i class="fas fa-minus"></i>
+                                    {% else %}
+                                        <i class="fas fa-arrow-down"></i>
+                                    {% endif %}
+                                    {{ blood_request.priority_label }}
+                                    <span class="priority-score-num">({{ blood_request.priority_score }})</span>
+                                </span>
+                                {% if blood_request.days_waiting > 0 %}
+                                    <div class="days-badge"><i class="fas fa-hourglass-half"></i> {{ blood_request.days_waiting }}d waiting</div>
+                                {% endif %}
+                            </td>
+                            <td style="text-align:center;">
+                                <span class="stock-indicator {{ blood_request.stock_css }}">
+                                    <i class="fas fa-cubes"></i> {{ blood_request.stock_label }}
+                                </span>
+                                <div class="stock-units-num">{{ blood_request.stock_units }} ml</div>
+                            </td>
                             <td class="date-display">{{ blood_request.date|date:"M d, Y" }}</td>
                             <td class="requester-info">
                                 {% if blood_request.patient %}

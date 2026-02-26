@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
 from .models import Donor, BloodDonate
 from blood.utils.phone import normalize_phone_number
 
@@ -10,6 +11,11 @@ class DonorUserForm(forms.ModelForm):
         widgets = {
             'password': forms.PasswordInput()
         }
+
+    def clean_password(self):
+        password = self.cleaned_data.get('password')
+        validate_password(password)
+        return password
 
 class DonorForm(forms.ModelForm):
     BLOOD_GROUP_CHOICES = [
@@ -80,6 +86,20 @@ class BloodDonateForm(forms.ModelForm):
     class Meta:
         model = BloodDonate
         fields = ['bloodgroup', 'unit', 'disease', 'age']
+
+    def clean_unit(self):
+        unit = self.cleaned_data.get('unit')
+        if unit is None or unit < 1:
+            raise forms.ValidationError('At least 1 unit must be donated.')
+        if unit > 10:
+            raise forms.ValidationError('Cannot donate more than 10 units at once.')
+        return unit
+
+    def clean_age(self):
+        age = self.cleaned_data.get('age')
+        if age is not None and (age < 18 or age > 65):
+            raise forms.ValidationError('Donors must be between 18 and 65 years old.')
+        return age
 
 
 class DonorUserUpdateForm(forms.ModelForm):

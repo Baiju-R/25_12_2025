@@ -25,6 +25,20 @@ class RequestForm(forms.ModelForm):
             'unit': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'})
         }
 
+    def clean_unit(self):
+        unit = self.cleaned_data.get('unit')
+        if unit is None or unit < 1:
+            raise forms.ValidationError('At least 1 unit of blood must be requested.')
+        if unit > 50:
+            raise forms.ValidationError('Cannot request more than 50 units at once.')
+        return unit
+
+    def clean_patient_age(self):
+        age = self.cleaned_data.get('patient_age')
+        if age is not None and (age < 0 or age > 120):
+            raise forms.ValidationError('Please enter a valid age (0-120).')
+        return age
+
 
 class FeedbackForm(forms.ModelForm):
     class Meta:

@@ -356,6 +356,24 @@
             <h4 class="table-title">
                 <i class="fas fa-procedures"></i> Patient Details
             </h4>
+
+            <form method="get" class="mb-4">
+                <div class="row justify-content-center">
+                    <div class="col-12 col-md-8 col-lg-6">
+                        <div class="input-group">
+                            <input type="text" name="q" class="form-control" placeholder="Search patients (name, blood group, mobile, disease, ID…)" value="{{ query|default:'' }}">
+                            {% if query %}
+                                <a class="btn btn-outline-secondary" href="?" title="Clear search">
+                                    <i class="fas fa-times"></i>
+                                </a>
+                            {% endif %}
+                            <button class="btn btn-primary" type="submit">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
             
             {% if patients %}
                 <div class="cards-grid">
@@ -420,7 +438,11 @@
                 </div>
             {% else %}
                 <div class="empty-state">
-                    <i class="fas fa-user-slash"></i> No patients found.
+                    {% if query %}
+                        <i class="fas fa-search"></i> No patients match "{{ query }}".
+                    {% else %}
+                        <i class="fas fa-user-slash"></i> No patients found.
+                    {% endif %}
                 </div>
             {% endif %}
         </div>

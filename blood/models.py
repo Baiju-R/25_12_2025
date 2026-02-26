@@ -369,3 +369,23 @@ class VerificationBadge(models.Model):
         owner = self.donor.get_name if self.donor_id else (self.patient.get_name if self.patient_id else 'Unknown')
         return f"{owner} • {self.badge_name}"
 
+
+class PasswordResetOTP(models.Model):
+    """Stores one-time passwords for SMS-based password reset."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_otps')
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_used = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def is_valid(self):
+        """OTP expires after 10 minutes."""
+        from django.utils import timezone
+        return (not self.is_used) and (timezone.now() - self.created_at).total_seconds() < 600
+
+    def __str__(self):
+        return f"OTP for {self.user.username} ({'used' if self.is_used else 'active'})"
+

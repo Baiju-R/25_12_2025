@@ -23,6 +23,8 @@ from botocore.exceptions import (
 from botocore.config import Config
 from django.conf import settings
 
+from blood.utils.phone import normalize_phone_number
+
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +172,22 @@ def check_sms_provider_health() -> Dict[str, Any]:
 def send_sms(phone: str, message: str):
     """Send a one-off SMS via AWS SNS."""
 
+    if not bool(getattr(settings, "AWS_SNS_ENABLED", False)):
+        return {
+            "status": "skipped",
+            "provider": "aws-sns",
+            "reason": "sns-disabled",
+        }
+
+    normalized_phone = normalize_phone_number(phone)
+    if not normalized_phone:
+        return {
+            "status": "error",
+            "provider": "aws-sns",
+            "error_code": "InvalidPhoneNumber",
+            "message": "Phone number is missing/invalid; expected E.164 or local digits.",
+        }
+
     sns = _get_sns_client()
     message = sanitize_sms_text(message)
 
@@ -189,7 +207,7 @@ def send_sms(phone: str, message: str):
     try:
         started = time.perf_counter()
         response = sns.publish(
-            PhoneNumber=phone,
+            PhoneNumber=normalized_phone,
             Message=message,
             MessageAttributes=attributes,
         )
@@ -203,7 +221,7 @@ def send_sms(phone: str, message: str):
             "response": response,
         }
     except (NoCredentialsError, PartialCredentialsError) as exc:
-        logger.error("SNS credentials error while publishing to %s: %s", phone, exc)
+        logger.error("SNS credentials error while publishing to %s: %s", normalized_phone, exc)
         return {
             "status": "error",
             "provider": "aws-sns",
@@ -213,7 +231,7 @@ def send_sms(phone: str, message: str):
     except ClientError as exc:
         code = (exc.response or {}).get("Error", {}).get("Code", "ClientError")
         message = (exc.response or {}).get("Error", {}).get("Message", str(exc))
-        logger.error("SNS publish failed to %s [%s]: %s", phone, code, message)
+        logger.error("SNS publish failed to %s [%s]: %s", normalized_phone, code, message)
         return {
             "status": "error",
             "provider": "aws-sns",
@@ -221,7 +239,7 @@ def send_sms(phone: str, message: str):
             "message": message,
         }
     except BotoCoreError as exc:
-        logger.error("SNS publish transport failure to %s: %s", phone, exc)
+        logger.error("SNS publish transport failure to %s: %s", normalized_phone, exc)
         return {
             "status": "error",
             "provider": "aws-sns",

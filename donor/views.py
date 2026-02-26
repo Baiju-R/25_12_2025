@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from blood.services import sms as sms_service
 from blood.forms import FeedbackForm
-from blood.models import Feedback
+from blood.models import Feedback, InAppNotification
 from .forms import DonorUserForm, DonorForm
 from .models import Donor, BloodDonate
 
@@ -157,6 +157,30 @@ def donorsignup_view(request):
                 # Add to donor group
                 my_donor_group, created = Group.objects.get_or_create(name='DONOR')
                 my_donor_group.user_set.add(user)
+
+                # Welcome in-app notification
+                try:
+                    InAppNotification.objects.create(
+                        donor=donor,
+                        title='Welcome to BloodBridge!',
+                        message=(
+                            f"Hello {user.first_name}, your donor account is now active. "
+                            "Visit your dashboard to update your profile, check eligibility, "
+                            "and start saving lives through blood donation."
+                        ),
+                    )
+                except Exception:
+                    logger.exception("Failed to create welcome notification for donor %s", user.username)
+
+                # Welcome SMS (best-effort, non-blocking)
+                try:
+                    sms_service.send_welcome_sms(
+                        phone=donor.mobile,
+                        first_name=user.first_name,
+                        role='Donor',
+                    )
+                except Exception:
+                    logger.exception("Failed to send welcome SMS for donor %s", user.username)
 
                 messages.success(request, 'Donor account created successfully! You can now login.')
                 return redirect('donorlogin')
@@ -679,7 +703,7 @@ def donor_request_history_view(request):
     
     try:
         donor = Donor.objects.get(user=request.user)
-        from blood.models import BloodRequest
+        from blood.models import BloodRequest, Stock
         requests = BloodRequest.objects.filter(request_by_donor=donor).order_by('-date')
         
         # Calculate statistics
@@ -687,7 +711,43 @@ def donor_request_history_view(request):
         approved_count = requests.filter(status='Approved').count()
         pending_count = requests.filter(status='Pending').count()
         rejected_count = requests.filter(status='Rejected').count()
-        
+
+        # ── Enrich with urgency + fulfillment data ───────────────────────
+        from django.utils import timezone as tz
+        import hashlib
+        today = tz.now().date()
+        stock_cache = {s.bloodgroup: s.unit for s in Stock.objects.all()}
+        pending_by_bg = {}  # track queue position per blood group
+
+        for br in requests:
+            bg = br.bloodgroup
+            # Urgency label (based on request age & is_urgent flag)
+            days_old = (today - br.date).days if br.date else 0
+            br.days_old = days_old
+            if br.status == 'Pending':
+                if br.is_urgent or days_old >= 5:
+                    br.urgency_label, br.urgency_css = 'Urgent', 'urgency-urgent'
+                elif days_old >= 2:
+                    br.urgency_label, br.urgency_css = 'Moderate', 'urgency-moderate'
+                else:
+                    br.urgency_label, br.urgency_css = 'Normal', 'urgency-normal'
+            else:
+                br.urgency_label, br.urgency_css = '', ''
+
+            # Fulfillment likelihood (stock vs request)
+            stock_units = stock_cache.get(bg, 0)
+            if br.status == 'Pending':
+                if stock_units >= br.unit * 2:
+                    br.fulfillment_label, br.fulfillment_css = 'Likely', 'fulfill-likely'
+                elif stock_units >= br.unit:
+                    br.fulfillment_label, br.fulfillment_css = 'Possible', 'fulfill-possible'
+                else:
+                    br.fulfillment_label, br.fulfillment_css = 'Unlikely', 'fulfill-unlikely'
+            elif br.status == 'Approved':
+                br.fulfillment_label, br.fulfillment_css = 'Fulfilled', 'fulfill-done'
+            else:
+                br.fulfillment_label, br.fulfillment_css = 'Declined', 'fulfill-declined'
+
         context = {
             'requests': requests,
             'total_requests': total_requests,

@@ -11,7 +11,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 
 from blood.models import BloodRequest
 from blood.forms import FeedbackForm
-from blood.models import Feedback
+from blood.models import Feedback, InAppNotification
 from blood.services import sms as sms_service
 from .forms import PatientUserForm, PatientForm
 from .models import Patient
@@ -56,6 +56,30 @@ def patientsignup_view(request):
                 my_patient_group, created = Group.objects.get_or_create(name='PATIENT')
                 my_patient_group.user_set.add(user)
                 
+                # Welcome in-app notification
+                try:
+                    InAppNotification.objects.create(
+                        patient=patient,
+                        title='Welcome to BloodBridge!',
+                        message=(
+                            f"Hello {user.first_name}, your patient account is now active. "
+                            "Visit your dashboard to submit blood requests, track their "
+                            "status, and find nearby donors."
+                        ),
+                    )
+                except Exception:
+                    logger.exception("Failed to create welcome notification for patient %s", user.username)
+
+                # Welcome SMS (best-effort, non-blocking)
+                try:
+                    sms_service.send_welcome_sms(
+                        phone=patient.mobile,
+                        first_name=user.first_name,
+                        role='Patient',
+                    )
+                except Exception:
+                    logger.exception("Failed to send welcome SMS for patient %s", user.username)
+
                 messages.success(request, 'Account created successfully! You can now login.')
                 
                 # If coming from request blood, redirect to make request after signup
@@ -140,8 +164,9 @@ def patient_dashboard_view(request):
         # Get recent requests
         recent_requests = requests.order_by('-date')[:5]
         recent_feedbacks = Feedback.objects.filter(patient=patient).order_by('-created_at')[:5]
-        from blood.models import VerificationBadge
+        from blood.models import InAppNotification, VerificationBadge
         verification_badge = VerificationBadge.objects.filter(patient=patient).order_by('-verified_at', '-id').first()
+        notifications = InAppNotification.objects.filter(patient=patient).order_by('-created_at')[:5]
         
         context = {
             'patient': patient,
@@ -154,6 +179,7 @@ def patient_dashboard_view(request):
             'recent_requests': recent_requests,
             'recent_feedbacks': recent_feedbacks,
             'verification_badge': verification_badge,
+            'notifications': notifications,
         }
     except Patient.DoesNotExist:
         messages.error(request, 'Patient profile not found. Please contact support.')
@@ -167,6 +193,7 @@ def patient_dashboard_view(request):
             'total_approved_units': 0,
             'recent_requests': [],
             'verification_badge': None,
+            'notifications': [],
         }
     
     return render(request, 'patient/patient_dashboard.html', context)
@@ -451,7 +478,63 @@ def patient_request_history_view(request):
         
         approved_units = requests.filter(status='Approved').aggregate(Sum('unit'))
         total_approved_units = approved_units['unit__sum'] if approved_units['unit__sum'] else 0
-        
+
+        # ── Enrich with queue position & availability ────────────────────
+        from blood.models import Stock
+        from django.utils import timezone as tz
+        today = tz.now().date()
+        stock_cache = {s.bloodgroup: s.unit for s in Stock.objects.all()}
+
+        # Queue position: count how many pending requests for this blood group
+        # exist before this patient's pending request
+        pending_all_by_bg = {}  # blood_group → list of pending request IDs in date order
+        for bg_val in stock_cache.keys():
+            pending_all_by_bg[bg_val] = list(
+                BloodRequest.objects.filter(status='Pending', bloodgroup=bg_val)
+                .order_by('date', 'id')
+                .values_list('id', flat=True)
+            )
+
+        for br in requests:
+            bg = br.bloodgroup
+            stock_units = stock_cache.get(bg, 0)
+            br.days_old = (today - br.date).days if br.date else 0
+
+            # Queue position for pending requests
+            if br.status == 'Pending':
+                queue_ids = pending_all_by_bg.get(bg, [])
+                try:
+                    br.queue_position = queue_ids.index(br.id) + 1
+                except ValueError:
+                    br.queue_position = len(queue_ids) + 1
+                br.queue_total = len(queue_ids)
+            else:
+                br.queue_position = None
+                br.queue_total = None
+
+            # Availability indicator
+            if stock_units == 0:
+                br.avail_label, br.avail_css = 'Out of Stock', 'avail-empty'
+            elif stock_units < br.unit:
+                br.avail_label, br.avail_css = 'Limited', 'avail-limited'
+            elif stock_units < br.unit * 3:
+                br.avail_label, br.avail_css = 'Moderate', 'avail-moderate'
+            else:
+                br.avail_label, br.avail_css = 'In Stock', 'avail-ok'
+
+            # Confidence score — higher when stock is ample and queue position is low
+            if br.status == 'Pending' and br.queue_position:
+                conf_base = min(100, max(10, int((stock_units / max(br.unit, 1)) * 40)))
+                conf_queue = max(0, 30 - (br.queue_position - 1) * 8)
+                br.confidence = min(95, conf_base + conf_queue)
+                br.confidence_css = 'conf-high' if br.confidence >= 70 else ('conf-mid' if br.confidence >= 40 else 'conf-low')
+            elif br.status == 'Approved':
+                br.confidence = 100
+                br.confidence_css = 'conf-done'
+            else:
+                br.confidence = 0
+                br.confidence_css = 'conf-na'
+
         context = {
             'requests': requests,
             'total_requests': total_requests,

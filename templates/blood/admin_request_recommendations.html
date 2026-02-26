@@ -107,6 +107,28 @@
         color: #27ae60;
     }
 
+    .ai-score-badge {
+        display: inline-block;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-weight: 900;
+        font-size: 1.1rem;
+        min-width: 60px;
+        text-align: center;
+    }
+    .ai-score-high { background: linear-gradient(135deg, #27ae60, #2ecc71); color: #fff; }
+    .ai-score-medium { background: linear-gradient(135deg, #f39c12, #e67e22); color: #fff; }
+    .ai-score-low { background: linear-gradient(135deg, #e74c3c, #c0392b); color: #fff; }
+    .ai-source-tag {
+        display: block;
+        font-size: 0.65rem;
+        font-weight: 700;
+        color: #95a5a6;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 3px;
+    }
+
     .reason-list {
         margin: 0;
         padding-left: 18px;
@@ -252,7 +274,8 @@
                                 <th>Donor</th>
                                 <th>Contact</th>
                                 <th>Eligibility</th>
-                                <th>Score</th>
+                                <th>AI Score</th>
+                                <th>Rule Score</th>
                                 <th>Reasons</th>
                             </tr>
                         </thead>
@@ -272,6 +295,16 @@
                                         <div><strong>Eligible:</strong> {% if rec.eligible %}Yes{% else %}No{% endif %}</div>
                                         <div><strong>Last donated:</strong> {% if rec.donor.last_donated_at %}{{ rec.donor.last_donated_at }}{% else %}—{% endif %}</div>
                                         <div><strong>Next eligible:</strong> {% if rec.next_eligible_date %}{{ rec.next_eligible_date }}{% else %}—{% endif %}</div>
+                                    </td>
+                                    <td style="text-align:center; vertical-align:middle;">
+                                        {% if rec.ai_score != None %}
+                                            <span class="ai-score-badge {% if rec.ai_score >= 70 %}ai-score-high{% elif rec.ai_score >= 40 %}ai-score-medium{% else %}ai-score-low{% endif %}">
+                                                {{ rec.ai_score|floatformat:0 }}<small>/100</small>
+                                            </span>
+                                            <span class="ai-source-tag">{{ rec.ai_source }}</span>
+                                        {% else %}
+                                            <span style="color:#bdc3c7; font-weight:700;">—</span>
+                                        {% endif %}
                                     </td>
                                     <td class="score">{{ rec.score|floatformat:1 }}</td>
                                     <td>

@@ -313,9 +313,12 @@
         <div class="navbar-collapse collapse w-100 order-3 dual-collapse2">
             <ul class="navbar-nav ml-auto">
                 <li class="nav-item">
-                    <a class="nav-link" href="/logout">
-                        Logout <i class="fas fa-sign-out-alt"></i>
-                    </a>
+                    <form method="post" action="/logout/" style="display:inline">
+                        {% csrf_token %}
+                        <button type="submit" class="nav-link btn btn-link" style="cursor:pointer">
+                            Logout <i class="fas fa-sign-out-alt"></i>
+                        </button>
+                    </form>
                 </li>
             </ul>
         </div>
