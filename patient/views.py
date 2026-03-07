@@ -39,57 +39,52 @@ def patientsignup_view(request):
             logger.debug("Patient signup user form errors: %s", userForm.errors)
         if patientForm.errors:
             logger.debug("Patient signup patient form errors: %s", patientForm.errors)
+
+        # Doctor prescription is mandatory at signup
+        has_prescription = bool(request.FILES.get('doctor_prescription'))
+        if not has_prescription:
+            messages.error(request, 'Doctor prescription is mandatory. Please upload your doctor\'s prescription.')
+            mydict.update({'userForm': userForm, 'patientForm': patientForm, 'from_request': from_request})
+            return render(request, 'patient/patientsignup.html', context=mydict)
         
         if userForm.is_valid() and patientForm.is_valid():
             try:
-                # Create user
+                # Create user (inactive until admin approves)
                 user = userForm.save(commit=False)
                 user.set_password(user.password)
+                user.is_active = False  # Account inactive until admin approval
                 user.save()
                 
-                # Create patient
+                # Create patient (not approved yet)
                 patient = patientForm.save(commit=False)
                 patient.user = user
+                patient.is_approved = False
                 patient.save()
                 
                 # Add to patient group
                 my_patient_group, created = Group.objects.get_or_create(name='PATIENT')
                 my_patient_group.user_set.add(user)
                 
-                # Welcome in-app notification
+                # Registration notification (visible after approval)
                 try:
                     InAppNotification.objects.create(
                         patient=patient,
-                        title='Welcome to BloodBridge!',
+                        title='Registration Received',
                         message=(
-                            f"Hello {user.first_name}, your patient account is now active. "
-                            "Visit your dashboard to submit blood requests, track their "
-                            "status, and find nearby donors."
+                            f"Hello {user.first_name}, your patient registration has been received. "
+                            "Your account is pending admin approval. You will receive a notification "
+                            "once your account is approved."
                         ),
                     )
                 except Exception:
-                    logger.exception("Failed to create welcome notification for patient %s", user.username)
+                    logger.exception("Failed to create registration notification for patient %s", user.username)
 
-                # Welcome SMS (best-effort, non-blocking)
-                try:
-                    sms_service.send_welcome_sms(
-                        phone=patient.mobile,
-                        first_name=user.first_name,
-                        role='Patient',
-                    )
-                except Exception:
-                    logger.exception("Failed to send welcome SMS for patient %s", user.username)
-
-                messages.success(request, 'Account created successfully! You can now login.')
-                
-                # If coming from request blood, redirect to make request after signup
-                if from_request:
-                    # Auto login the user and redirect to make request
-                    login(request, user)
-                    messages.info(request, 'Welcome! You can now make your blood request.')
-                    return redirect('make-request')
-                else:
-                    return redirect('patientlogin')
+                messages.success(
+                    request,
+                    'Registration submitted successfully! Your account is pending admin approval. '
+                    'You will be notified once approved.'
+                )
+                return redirect('patient-pending-approval')
                     
             except Exception as e:
                 logger.exception("Error during patient signup")
@@ -114,12 +109,35 @@ def patientsignup_view(request):
     mydict['from_request'] = from_request
     return render(request, 'patient/patientsignup.html', context=mydict)
 
+
+def patient_pending_approval_view(request):
+    """Show a waiting page for patients whose accounts are pending admin approval."""
+    return render(request, 'patient/pending_approval.html')
+
 def patientlogin_view(request):
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
         
         logger.debug("Patient login attempt - Username: %s", username)
+
+        # Check if user exists but is inactive (pending approval)
+        try:
+            from django.contrib.auth.models import User as AuthUser
+            check_user = AuthUser.objects.get(username=username)
+            if not check_user.is_active and check_user.groups.filter(name='PATIENT').exists():
+                try:
+                    patient_check = Patient.objects.get(user=check_user)
+                    if not patient_check.is_approved:
+                        messages.warning(
+                            request,
+                            'Your account is pending admin approval. Please wait for approval before logging in.'
+                        )
+                        return render(request, 'patient/patientlogin.html')
+                except Patient.DoesNotExist:
+                    pass
+        except AuthUser.DoesNotExist:
+            pass
         
         user = authenticate(request, username=username, password=password)
         if user is not None:
@@ -127,6 +145,18 @@ def patientlogin_view(request):
             logger.debug("User groups: %s", [g.name for g in user.groups.all()])
             
             if user.groups.filter(name='PATIENT').exists():
+                # Check if approved
+                try:
+                    patient_obj = Patient.objects.get(user=user)
+                    if not patient_obj.is_approved:
+                        messages.warning(
+                            request,
+                            'Your account is pending admin approval. Please wait for approval before logging in.'
+                        )
+                        return render(request, 'patient/patientlogin.html')
+                except Patient.DoesNotExist:
+                    pass
+
                 login(request, user)
                 messages.success(request, f'Welcome back, {user.first_name}!')
                 return redirect('patient-dashboard')
@@ -372,6 +402,11 @@ def patient_request_view(request):
                 errors.append('Zip/Postal code must be 4-10 digits.')
         elif is_urgent:
             errors.append('Zip/Postal code is required so admins can triage urgent requests locally.')
+
+        # Doctor prescription is mandatory for every request (including emergency)
+        prescription_file = request.FILES.get('doctor_prescription')
+        if not prescription_file:
+            errors.append('Doctor prescription is mandatory for every blood request (including emergency requests).')
         
         if errors:
             for error in errors:
@@ -388,6 +423,7 @@ def patient_request_view(request):
                 bloodgroup=bloodgroup,
                 unit=unit,
                 status='Pending',
+                doctor_prescription=prescription_file,
                 is_urgent=is_urgent,
                 request_zipcode=request_zipcode,
             )

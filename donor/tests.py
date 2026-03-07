@@ -15,6 +15,7 @@ from blood import models as blood_models
 class DonorFormGeoTests(TestCase):
 	def setUp(self):
 		self.base_data = {
+			'aadhaar_number': '123456789012',
 			'bloodgroup': 'A+',
 			'address': '221B Baker Street',
 			'mobile': '1234567890',

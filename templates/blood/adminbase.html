@@ -120,9 +120,13 @@
         .wrapper .sidebar ul li a {
             color: #ecf0f1;
             display: block;
-            padding: 15px 20px;
+            padding: 12px 16px;
             border-radius: 15px;
             font-weight: 500;
+            font-size: 0.88rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
             transition: all 0.3s ease;
             position: relative;
             z-index: 1;
@@ -239,14 +243,22 @@
         }
 
         /* Sidebar Icons Specific Colors */
-        .sidebar .fa-home { color: #f39c12; }
-        .sidebar .fa-user { color: #3498db; }
-        .sidebar .fa-user-injured { color: #e74c3c; }
-        .sidebar .fa-hand-holding-medical { color: #27ae60; }
-        .sidebar .fa-sync-alt { color: #9b59b6; }
-        .sidebar .fa-history { color: #e67e22; }
-        .sidebar .fa-hand-holding-water { color: #1abc9c; }
-    .sidebar .fa-trophy { color: #f1c40f; }
+        .sidebar .fa-home { color: #f39c12; }              /* Dashboard – amber */
+        .sidebar .fa-tint { color: #e74c3c; }              /* Blood Stock – red */
+        .sidebar .fa-users { color: #3498db; }             /* Donors – blue */
+        .sidebar .fa-map-marked-alt { color: #1abc9c; }    /* Donor Map – teal */
+        .sidebar .fa-user-injured { color: #e91e63; }      /* Patients – pink */
+        .sidebar .fa-user-check { color: #ff9800; }        /* Pending Approvals – orange */
+        .sidebar .fa-hand-holding-medical { color: #27ae60; } /* Blood Requests – green */
+        .sidebar .fa-history { color: #e67e22; }           /* Request History – dark orange */
+        .sidebar .fa-hand-holding-water { color: #00bcd4; } /* Donations – cyan */
+        .sidebar .fa-trophy { color: #f1c40f; }            /* Leadership – gold */
+        .sidebar .fa-chart-line { color: #9b59b6; }        /* Analytics – purple */
+        .sidebar .fa-calendar-check { color: #4caf50; }    /* Appointments – green */
+        .sidebar .fa-shield-alt { color: #2196f3; }        /* Verification – sky blue */
+        .sidebar .fa-clipboard-check { color: #795548; }   /* Audit Logs – brown */
+        .sidebar .fa-file-export { color: #607d8b; }       /* Reports – blue-grey */
+        .sidebar .fa-comment-dots { color: #ff5722; }      /* Feedback – deep orange */
 
         /* Mobile Menu Toggle */
         .mobile-menu-toggle {
@@ -336,6 +348,7 @@
                 <li><a href="/admin-donor"><i class="fas fa-users"></i> Donors</a></li>
                 <li><a href="/admin-donor-map"><i class="fas fa-map-marked-alt"></i> Donor Map</a></li>
                 <li><a href="/admin-patient"><i class="fas fa-user-injured"></i> Patients</a></li>
+                <li><a href="/admin-pending-approvals"><i class="fas fa-user-check"></i> Pending Approvals</a></li>
                 <li><a href="/admin-request"><i class="fas fa-hand-holding-medical"></i> Blood Requests</a></li>
                 <li><a href="/admin-request-history"><i class="fas fa-history"></i> Request History</a></li>
                 <li><a href="/admin-donation"><i class="fas fa-hand-holding-water"></i> Donations</a></li>

@@ -7,18 +7,24 @@ from django.contrib.auth.models import User, Group
 from django.urls import reverse
 from django.utils import timezone
 
+from django.core.files.uploadedfile import SimpleUploadedFile
+
 from blood.models import InAppNotification, PasswordResetOTP
 from donor.models import Donor
 from patient.models import Patient
+
+
+def _fake_pdf(name='file.pdf'):
+    return SimpleUploadedFile(name, b'%PDF-1.4 fake', content_type='application/pdf')
 
 
 # ---------------------------------------------------------------------------
 # Welcome Notification Tests (Donor)
 # ---------------------------------------------------------------------------
 
-@override_settings(AWS_SNS_ENABLED=False)
+@override_settings(AWS_SNS_ENABLED=False, GEOCODER_ALLOW_REMOTE=False)
 class DonorWelcomeNotificationTest(TestCase):
-    """Welcome InAppNotification on donor signup (SMS disabled in tests)."""
+    """Registration notification on donor signup; welcome notification on admin approval."""
 
     def setUp(self):
         self.client = Client()
@@ -29,13 +35,16 @@ class DonorWelcomeNotificationTest(TestCase):
             'last_name': 'Kumar',
             'username': username,
             'password': 'StrongPass123!',
+            'aadhaar_number': '123456789012',
             'bloodgroup': 'O+',
             'address': 'Chennai, Tamil Nadu',
             'mobile': '+919361046558',
             'sex': 'U',
+            'document': _fake_pdf('report.pdf'),
         }
 
     def test_donor_signup_creates_welcome_notification(self):
+        """Signup now creates a 'Registration Received' notification (pending approval)."""
         data = self._donor_post_data()
         resp = self.client.post(reverse('donorsignup'), data)
         self.assertEqual(resp.status_code, 302)
@@ -45,24 +54,25 @@ class DonorWelcomeNotificationTest(TestCase):
 
         notifs = InAppNotification.objects.filter(donor=donor)
         self.assertEqual(notifs.count(), 1)
-        self.assertIn('Welcome', notifs.first().title)
+        self.assertIn('Registration Received', notifs.first().title)
         self.assertIn('Ravi', notifs.first().message)
 
-    @patch('donor.views.sms_service.send_welcome_sms')
-    def test_donor_signup_calls_welcome_sms(self, mock_sms):
-        mock_sms.return_value = {'status': 'skipped', 'reason': 'sns-disabled'}
+    def test_donor_signup_calls_welcome_sms(self):
+        """Welcome SMS is now sent at admin approval, not signup. Signup should NOT call it."""
         data = self._donor_post_data(username='ravikumar2')
-        self.client.post(reverse('donorsignup'), data)
-        mock_sms.assert_called_once()
+        resp = self.client.post(reverse('donorsignup'), data)
+        self.assertEqual(resp.status_code, 302)
+        # Verify user is created but inactive (pending approval)
+        user = User.objects.get(username='ravikumar2')
+        self.assertFalse(user.is_active)
 
-    @patch('donor.views.sms_service.send_welcome_sms', side_effect=Exception('SNS error'))
-    def test_donor_signup_succeeds_even_if_sms_fails(self, mock_sms):
-        """SMS failure must not block signup."""
+    def test_donor_signup_succeeds_even_if_sms_fails(self):
+        """Signup succeeds; account is pending approval."""
         data = self._donor_post_data(username='ravikumar3')
         resp = self.client.post(reverse('donorsignup'), data)
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(User.objects.filter(username='ravikumar3').exists())
-        self.assertEqual(InAppNotification.objects.count(), 1)  # notification still created
+        self.assertEqual(InAppNotification.objects.count(), 1)  # registration notification
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +81,7 @@ class DonorWelcomeNotificationTest(TestCase):
 
 @override_settings(AWS_SNS_ENABLED=False)
 class PatientWelcomeNotificationTest(TestCase):
-    """Welcome InAppNotification on patient signup (SMS disabled in tests)."""
+    """Registration notification on patient signup; welcome notification on admin approval."""
 
     def setUp(self):
         self.client = Client()
@@ -82,15 +92,18 @@ class PatientWelcomeNotificationTest(TestCase):
             'last_name': 'S',
             'username': username,
             'password': 'StrongPass123!',
+            'aadhaar_number': '987654321012',
             'bloodgroup': 'A+',
             'address': 'Madurai, Tamil Nadu',
             'mobile': '+919385425650',
             'age': 30,
             'disease': 'Anemia',
             'doctorname': 'Dr. Rajan',
+            'doctor_prescription': _fake_pdf('rx.pdf'),
         }
 
     def test_patient_signup_creates_welcome_notification(self):
+        """Signup now creates 'Registration Received' notification (pending approval)."""
         data = self._patient_post_data()
         resp = self.client.post(reverse('patientsignup'), data)
         self.assertEqual(resp.status_code, 302)
@@ -100,18 +113,19 @@ class PatientWelcomeNotificationTest(TestCase):
 
         notifs = InAppNotification.objects.filter(patient=patient)
         self.assertEqual(notifs.count(), 1)
-        self.assertIn('Welcome', notifs.first().title)
+        self.assertIn('Registration Received', notifs.first().title)
         self.assertIn('Meena', notifs.first().message)
 
-    @patch('patient.views.sms_service.send_welcome_sms')
-    def test_patient_signup_calls_welcome_sms(self, mock_sms):
-        mock_sms.return_value = {'status': 'skipped'}
+    def test_patient_signup_calls_welcome_sms(self):
+        """Welcome SMS is now sent at admin approval, not signup."""
         data = self._patient_post_data(username='meena_s2')
-        self.client.post(reverse('patientsignup'), data)
-        mock_sms.assert_called_once()
+        resp = self.client.post(reverse('patientsignup'), data)
+        self.assertEqual(resp.status_code, 302)
+        user = User.objects.get(username='meena_s2')
+        self.assertFalse(user.is_active)
 
-    @patch('patient.views.sms_service.send_welcome_sms', side_effect=Exception('SNS down'))
-    def test_patient_signup_succeeds_even_if_sms_fails(self, mock_sms):
+    def test_patient_signup_succeeds_even_if_sms_fails(self):
+        """Signup succeeds; account pending approval."""
         data = self._patient_post_data(username='meena_s3')
         resp = self.client.post(reverse('patientsignup'), data)
         self.assertEqual(resp.status_code, 302)

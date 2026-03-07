@@ -29,6 +29,14 @@ class BloodRequest(models.Model):
     is_urgent = models.BooleanField(default=False)
     request_zipcode = models.CharField(max_length=12, blank=True)
 
+    # Doctor prescription (mandatory for every request including emergency)
+    doctor_prescription = models.FileField(
+        upload_to='prescriptions/requests/%Y/%m/',
+        null=True,
+        blank=True,
+        help_text='Upload doctor prescription for this blood request',
+    )
+
     # Admin SMS diagnostics (last approval notification attempt)
     sms_last_approval_attempt_at = models.DateTimeField(null=True, blank=True)
     sms_last_approval_patient_to = models.CharField(max_length=32, blank=True)

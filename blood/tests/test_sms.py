@@ -3,11 +3,12 @@
 from unittest.mock import MagicMock
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
 from blood.models import BloodRequest
 from blood.services import sms
-from donor.models import Donor
+from donor.models import Donor, MedicalReport
 from patient.models import Patient
 
 
@@ -23,12 +24,19 @@ class SNSAlertTests(TestCase):
 			first_name="Test",
 			last_name=f"Donor{self.user_counter}",
 		)
-		return Donor.objects.create(
+		donor = Donor.objects.create(
 			user=user,
 			bloodgroup=bloodgroup,
 			address="Test Address",
 			mobile=mobile,
+			is_available=True,
 		)
+		MedicalReport.objects.create(
+			donor=donor,
+			document=SimpleUploadedFile('report.pdf', b'%PDF-1.4 fake', content_type='application/pdf'),
+			document_name='report.pdf',
+		)
+		return donor
 
 	def _create_request(self, bloodgroup="A+", is_urgent=True):
 		return BloodRequest.objects.create(

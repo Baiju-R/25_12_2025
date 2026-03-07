@@ -368,6 +368,12 @@
                     <span>Feedback</span>
                 </a>
             </li>
+            <li>
+                <a href="{% url 'donor-medical-reports' %}" class="{% if request.path == '/donor/medical-reports/' %}active{% endif %}">
+                    <i class="fas fa-file-medical"></i>
+                    <span>Medical Reports</span>
+                </a>
+            </li>
         </ul>
     </aside>
     <!-- Main Content -->

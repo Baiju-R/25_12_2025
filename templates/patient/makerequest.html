@@ -165,7 +165,7 @@
                 {% endfor %}
             {% endif %}
             
-            <form method="POST" autocomplete="off" id="requestForm">
+            <form method="POST" enctype="multipart/form-data" autocomplete="off" id="requestForm">
                 {% csrf_token %}
                 
                 <div class="form-row">
@@ -235,6 +235,21 @@
                         <label class="custom-control-label" for="patientUrgentToggle">Mark as urgent &amp; highlight this request to admins</label>
                     </div>
                     <small class="text-muted">Urgent requests jump to the top of the admin review queue. A postal code ensures the right hospital teams are contacted.</small>
+                </div>
+
+                <div class="form-row">
+                    <label class="form-label">
+                        <i class="fas fa-file-prescription"></i>
+                        Doctor's Prescription <span style="color:#e74c3c;">*</span>
+                    </label>
+                    <div style="border: 2px dashed #bdc3c7; border-radius: 15px; padding: 20px; background: #f8f9fa; transition: all 0.3s ease;">
+                        <input type="file" name="doctor_prescription" class="form-control-file" required
+                               accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+                        <small class="text-muted d-block mt-2">
+                            <i class="fas fa-info-circle"></i> A doctor's prescription is <strong>mandatory</strong> for every blood request (including emergency).
+                            Accepted: PDF, JPG, PNG, DOC, DOCX (max 10MB)
+                        </small>
+                    </div>
                 </div>
 
                 <button class="submit-btn" type="submit" id="submitButton">

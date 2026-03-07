@@ -4,607 +4,194 @@
 {%load static%}
 
 <style>
-    /* Enhanced Admin Request Styles */
-    .request-dashboard {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        min-height: 100vh;
-        padding: 20px 0;
-    }
-    
-    .dashboard-header {
-        text-align: center;
-        color: white;
-        margin-bottom: 40px;
-    }
-    
-    .dashboard-header h1 {
-        font-size: 2.5rem;
-        font-weight: 700;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        margin-bottom: 10px;
-    }
-    
-    .dashboard-header p {
-        font-size: 1.2rem;
-        opacity: 0.9;
-    }
-    
-    .table-container {
-        background: white;
-        border-radius: 20px;
-        padding: 30px;
-        box-shadow: 0 15px 35px rgba(0,0,0,0.1);
-        overflow: hidden;
-    }
-    
-    .table-title {
-        text-align: center;
-        color: #2c3e50;
-        margin-bottom: 30px;
-        font-weight: 600;
-        position: relative;
-        font-size: 1.8rem;
-    }
-    
-    .table-title::after {
-        content: '';
-        position: absolute;
-        bottom: -10px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 80px;
-        height: 3px;
-        background: linear-gradient(90deg, #e74c3c, #c0392b);
-        border-radius: 2px;
-    }
-    
-    .alert-message {
-        background: linear-gradient(45deg, #e74c3c, #c0392b);
-        color: white;
-        padding: 15px 25px;
-        border-radius: 15px;
-        text-align: center;
-        margin-bottom: 30px;
-        font-weight: 600;
-        box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
-    }
-    
-    .no-request-message {
-        background: linear-gradient(45deg, #3498db, #2980b9);
-        color: white;
-        padding: 30px;
-        border-radius: 20px;
-        text-align: center;
-        font-size: 1.2rem;
-        font-weight: 600;
-        box-shadow: 0 10px 30px rgba(52, 152, 219, 0.3);
-    }
-    
-    .enhanced-table {
-        border-radius: 15px;
-        overflow: hidden;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-        border: none !important;
-    }
-    
-    .enhanced-table thead th {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        padding: 15px 12px;
-        border: none;
-        font-size: 0.9rem;
-    }
-    
-    .enhanced-table tbody tr {
-        transition: all 0.3s ease;
-        border: none;
-    }
-    
-    .enhanced-table tbody tr:hover {
-        background-color: #f8f9fa;
-        transform: scale(1.01);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-    }
-    
-    .enhanced-table tbody td {
-        padding: 15px 12px;
-        vertical-align: middle;
-        border: 1px solid #ecf0f1;
-        font-weight: 500;
-    }
-    
-    .enhanced-table tbody tr:nth-child(even) {
-        background-color: #f8f9fa;
-    }
-    
-    .status-label {
-        padding: 8px 15px;
-        border-radius: 20px;
-        font-weight: 600;
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        display: inline-block;
-        min-width: 80px;
-        text-align: center;
-    }
-    
-    .status-pending {
-        background: linear-gradient(45deg, #f39c12, #e67e22);
-        color: white;
-        box-shadow: 0 4px 15px rgba(243, 156, 18, 0.3);
-    }
-    
-    .status-approved {
-        background: linear-gradient(45deg, #27ae60, #2ecc71);
-        color: white;
-        box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
-    }
-    
-    .status-rejected {
-        background: linear-gradient(45deg, #e74c3c, #c0392b);
-        color: white;
-        box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
-    }
-    
-    .action-btn {
-        padding: 8px 15px;
-        border-radius: 20px;
-        font-weight: 600;
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        transition: all 0.3s ease;
-        border: none;
-        margin: 2px;
-        min-width: 80px;
-    }
-    
-    .btn-approve {
-        background: linear-gradient(45deg, #27ae60, #2ecc71);
-        color: white;
-        box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
-    }
-    
-    .btn-approve:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(39, 174, 96, 0.4);
-        color: white;
-    }
-    
-    .btn-reject {
-        background: linear-gradient(45deg, #e74c3c, #c0392b);
-        color: white;
-        box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
-    }
-    
-    .btn-reject:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(231, 76, 60, 0.4);
-        color: white;
+    .req-page { padding: 20px 0; }
+    .req-page .page-title { font-size: 1.5rem; font-weight: 700; color: #2c3e50; margin-bottom: 6px; }
+    .req-page .page-title i { color: #667eea; margin-right: 8px; }
+    .req-page .page-subtitle { color: #7f8c8d; font-size: 0.92rem; margin-bottom: 18px; }
+
+    .req-card {
+        background: #fff; border-radius: 12px; padding: 18px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 14px;
     }
 
-    .btn-recommend {
-        background: linear-gradient(45deg, #3498db, #2980b9);
-        color: white;
-        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+    /* Compact table */
+    .req-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; table-layout: fixed; }
+    .req-table th {
+        background: #f8f9fa; color: #6c757d; font-weight: 600; font-size: 0.72rem;
+        text-transform: uppercase; letter-spacing: 0.4px;
+        padding: 6px 6px; border-bottom: 2px solid #dee2e6; text-align: left;
+        white-space: nowrap; overflow: hidden;
     }
+    .req-table td {
+        padding: 7px 6px; border-bottom: 1px solid #f0f0f0;
+        vertical-align: middle; overflow: hidden; text-overflow: ellipsis;
+    }
+    .req-table tr:hover td { background: #f8f9fe; }
 
-    .btn-recommend:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
-        color: white;
-    }
+    /* Column widths — total 100% */
+    .req-table .col-id { width: 4%; }
+    .req-table .col-name { width: 12%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .req-table .col-age { width: 4%; text-align: center; }
+    .req-table .col-reason { width: 13%; }
+    .req-table .col-bg { width: 5%; text-align: center; }
+    .req-table .col-unit { width: 5%; text-align: center; }
+    .req-table .col-priority { width: 9%; text-align: center; }
+    .req-table .col-stock { width: 8%; text-align: center; }
+    .req-table .col-date { width: 8%; }
+    .req-table .col-by { width: 10%; }
+    .req-table .col-status { width: 6%; text-align: center; }
+    .req-table .col-action { width: 16%; text-align: center; }
 
-    .btn-emergency {
-        background: linear-gradient(45deg, #7c3aed, #5b21b6);
-        color: white;
-        box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3);
+    /* Inline helpers */
+    .req-table .name-cell { font-weight: 600; color: #2c3e50; }
+    .req-table .id-cell { font-weight: 700; color: #667eea; font-family: monospace; font-size: 0.8rem; }
+    .req-table .muted { color: #95a5a6; font-size: 0.8rem; }
+    .reason-cell {
+        color: #6c3483; font-size: 0.8rem; white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis; max-width: 0;
     }
+    .bg-badge {
+        background: #fee2e2; color: #dc2626; padding: 1px 6px; border-radius: 6px;
+        font-weight: 700; font-size: 0.78rem;
+    }
+    .unit-cell { font-weight: 700; color: #27ae60; }
 
-    .btn-emergency:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(124, 58, 237, 0.45);
-        color: white;
+    /* Tiny priority badge */
+    .pri-badge {
+        padding: 2px 6px; border-radius: 8px; font-size: 0.7rem; font-weight: 700;
+        color: #fff; white-space: nowrap; display: inline-block;
     }
-    
-    .btn-approve a, .btn-reject a, .btn-recommend {
-        color: white !important;
-        text-decoration: none !important;
-    }
-    
-    .blood-group-badge {
-        background: linear-gradient(45deg, #e74c3c, #c0392b);
-        color: white;
-        padding: 6px 12px;
-        border-radius: 15px;
-        font-weight: 700;
-        font-size: 0.9rem;
-        display: inline-block;
-        min-width: 45px;
-        text-align: center;
-        box-shadow: 0 3px 10px rgba(231, 76, 60, 0.3);
-    }
-    
-    .patient-name {
-        font-weight: 600;
-        color: #2c3e50;
-        font-size: 1.1rem;
-    }
-    
-    .age-display {
-        font-weight: 600;
-        color: #7f8c8d;
-        font-size: 1rem;
-    }
-    
-    .reason-display {
-        color: #8e44ad;
-        font-weight: 500;
-        background: #f8f9fa;
-        padding: 4px 8px;
-        border-radius: 10px;
-        border-left: 3px solid #8e44ad;
-    }
-    
-    .unit-display {
-        font-weight: 700;
-        color: #27ae60;
-        font-size: 1.1rem;
-    }
-    
-    .date-display {
-        color: #5a6c7d;
-        font-weight: 500;
-    }
-    
-    .action-buttons {
-        display: flex;
-        gap: 5px;
-        justify-content: center;
-        flex-wrap: wrap;
-    }
-    
-    /* Responsive adjustments */
-    @media (max-width: 768px) {
-        .table-container {
-            padding: 20px 15px;
-        }
-        
-        .enhanced-table {
-            font-size: 0.85rem;
-        }
-        
-        .enhanced-table thead th,
-        .enhanced-table tbody td {
-            padding: 10px 8px;
-        }
-        
-        .action-btn {
-            padding: 6px 12px;
-            font-size: 0.75rem;
-            min-width: 70px;
-        }
-        
-        .action-buttons {
-            flex-direction: column;
-            gap: 2px;
-        }
-    }
+    .pri-critical { background: #dc2626; animation: pulse-c 1.5s ease-in-out infinite; }
+    @keyframes pulse-c { 0%,100%{box-shadow:0 0 4px rgba(220,38,38,.3)} 50%{box-shadow:0 0 10px rgba(220,38,38,.6)} }
+    .pri-high { background: #ea580c; }
+    .pri-medium { background: #d97706; }
+    .pri-low { background: #059669; }
+    .days-sm { font-size: 0.68rem; color: #94a3b8; display: block; }
 
-    /* Fix for request ID styling */
-    .request-id {
-        font-weight: 700;
-        color: #667eea;
-        font-family: monospace;
-        font-size: 0.9rem;
-    }
-
-    /* Fix for requester info badges */
-    .requester-info .badge {
-        font-size: 0.75rem;
-        padding: 5px 8px;
-        border-radius: 12px;
-    }
-
-    .badge-info {
-        background: linear-gradient(45deg, #3498db, #2980b9) !important;
-    }
-
-    .badge-success {
-        background: linear-gradient(45deg, #27ae60, #2ecc71) !important;
-    }
-
-    .badge-secondary {
-        background: linear-gradient(45deg, #95a5a6, #7f8c8d) !important;
-    }
-
-    /* Fix for action buttons */
-    .action-buttons .btn {
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-
-    .action-buttons .btn:hover {
-        transform: translateY(-2px);
-    }
-
-    /* Fix for table responsiveness */
-    @media (max-width: 768px) {
-        .table-responsive {
-            border: none;
-            box-shadow: none;
-        }
-        
-        .enhanced-table {
-            font-size: 0.8rem;
-        }
-        
-        .action-buttons {
-            flex-direction: column;
-            gap: 5px;
-        }
-        
-        .action-btn {
-            font-size: 0.7rem;
-            padding: 6px 10px;
-        }
-    }
-
-    /* Fix for reason display truncation */
-    .reason-display {
-        max-width: 200px;
-        word-wrap: break-word;
-        overflow: hidden;
-    }
-
-    /* Loading state for buttons */
-    .btn-loading {
-        opacity: 0.6;
-        pointer-events: none;
-    }
-
-    .btn-loading::after {
-        content: '';
-        width: 16px;
-        height: 16px;
-        border: 2px solid transparent;
-        border-top: 2px solid white;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        display: inline-block;
-        margin-left: 8px;
-    }
-
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-
-    /* Priority indicator badges */
-    .priority-badge {
-        padding: 5px 12px;
-        border-radius: 12px;
-        font-weight: 700;
-        font-size: 0.78rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        white-space: nowrap;
-    }
-    .priority-critical {
-        background: linear-gradient(135deg, #dc2626, #991b1b);
-        color: #fff;
-        box-shadow: 0 2px 8px rgba(220, 38, 38, 0.45);
-        animation: pulse-critical 1.5s ease-in-out infinite;
-    }
-    @keyframes pulse-critical {
-        0%, 100% { box-shadow: 0 2px 8px rgba(220, 38, 38, 0.45); }
-        50% { box-shadow: 0 2px 16px rgba(220, 38, 38, 0.7); }
-    }
-    .priority-high {
-        background: linear-gradient(135deg, #ea580c, #c2410c);
-        color: #fff;
-        box-shadow: 0 2px 8px rgba(234, 88, 12, 0.35);
-    }
-    .priority-medium {
-        background: linear-gradient(135deg, #d97706, #b45309);
-        color: #fff;
-        box-shadow: 0 2px 8px rgba(217, 119, 6, 0.3);
-    }
-    .priority-low {
-        background: linear-gradient(135deg, #059669, #047857);
-        color: #fff;
-        box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
-    }
-    .priority-score-num {
-        font-size: 0.7rem;
-        opacity: 0.85;
-        margin-left: 2px;
-    }
-
-    /* Stock level indicators */
-    .stock-indicator {
-        padding: 4px 10px;
-        border-radius: 10px;
-        font-weight: 600;
-        font-size: 0.8rem;
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-    }
+    /* Tiny stock indicator */
+    .stk-badge { padding: 1px 6px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; display: inline-block; }
     .stock-ok { background: #d1fae5; color: #065f46; }
     .stock-limited { background: #fef3c7; color: #92400e; }
     .stock-low { background: #fed7aa; color: #9a3412; }
     .stock-empty { background: #fee2e2; color: #991b1b; }
-    .stock-units-num {
-        font-weight: 700;
-        font-family: monospace;
-        font-size: 0.85rem;
+    .stk-num { font-size: 0.7rem; color: #64748b; display: block; font-weight: 600; }
+
+    /* Status */
+    .sts-badge {
+        padding: 2px 6px; border-radius: 8px; font-size: 0.7rem; font-weight: 700;
+        color: #fff; display: inline-block;
     }
-    .days-badge {
-        display: inline-block;
-        font-size: 0.72rem;
-        color: #64748b;
-        margin-top: 2px;
+    .sts-pending { background: #f59e0b; }
+    .sts-approved { background: #10b981; }
+    .sts-rejected { background: #ef4444; }
+
+    /* Requester badge */
+    .by-badge { font-size: 0.72rem; padding: 1px 5px; border-radius: 6px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 100%; }
+    .by-patient { background: #dbeafe; color: #1e40af; }
+    .by-donor { background: #d1fae5; color: #065f46; }
+    .by-unknown { background: #f1f5f9; color: #64748b; }
+
+    /* Action buttons row — compact */
+    .act-row { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; }
+    .act-btn {
+        padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 600;
+        border: none; color: #fff; cursor: pointer; text-decoration: none; display: inline-flex;
+        align-items: center; gap: 3px; white-space: nowrap;
     }
+    .act-btn:hover { opacity: 0.88; color: #fff; }
+    .act-review { background: #3b82f6; }
+    .act-broadcast { background: #7c3aed; }
+    .act-approve { background: #10b981; }
+    .act-reject { background: #ef4444; }
+
+    .empty-msg { text-align: center; padding: 40px 20px; color: #7f8c8d; }
+    .empty-msg i { font-size: 2.5rem; display: block; margin-bottom: 12px; color: #bdc3c7; }
+    .empty-msg a { color: #3b82f6; text-decoration: none; font-weight: 600; }
 </style>
 
-<div class="request-dashboard">
-    <div class="container">
-        <div class="dashboard-header">
-            <h1><i class="fas fa-clipboard-list"></i> Blood Request Management</h1>
-            <p>Process and Manage Blood Requests</p>
-        </div>
+<div class="container-fluid req-page">
+    <h2 class="page-title"><i class="fas fa-clipboard-list"></i> Blood Requests</h2>
 
-        <!-- Display messages at the top -->
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert" style="white-space: pre-line; margin-bottom: 20px;">
-                    {{ message }}
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert" style="white-space:pre-line; margin-bottom:12px; font-size:0.9rem;">
+                {{ message }}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    {% if blood_requests %}
+    <p class="page-subtitle">{{ total_pending }} pending requests &middot; {{ total_pending_units }} ml total</p>
+    <div class="req-card">
+        <table class="req-table">
+            <thead><tr>
+                <th class="col-id">#</th>
+                <th class="col-name">Patient</th>
+                <th class="col-age">Age</th>
+                <th class="col-reason">Reason</th>
+                <th class="col-bg">BG</th>
+                <th class="col-unit">ml</th>
+                <th class="col-priority">Priority</th>
+                <th class="col-stock">Stock</th>
+                <th class="col-date">Date</th>
+                <th class="col-by">By</th>
+                <th class="col-status">Status</th>
+                <th class="col-action">Actions</th>
+            </tr></thead>
+            <tbody>
+            {% for r in blood_requests %}
+            <tr>
+                <td class="id-cell">{{ r.id }}</td>
+                <td class="name-cell" title="{{ r.patient_name }}">{{ r.patient_name|truncatechars:18 }}</td>
+                <td class="muted" style="text-align:center">{{ r.patient_age }}</td>
+                <td class="reason-cell" title="{{ r.reason }}">{{ r.reason|truncatechars:30 }}</td>
+                <td style="text-align:center"><span class="bg-badge">{{ r.bloodgroup }}</span></td>
+                <td class="unit-cell" style="text-align:center">{{ r.unit }}</td>
+                <td style="text-align:center">
+                    <span class="pri-badge pri-{{ r.priority_css|cut:'priority-' }}">
+                        {{ r.priority_label }}
+                    </span>
+                    {% if r.days_waiting > 0 %}<span class="days-sm">{{ r.days_waiting }}d</span>{% endif %}
+                </td>
+                <td style="text-align:center">
+                    <span class="stk-badge {{ r.stock_css }}">{{ r.stock_label }}</span>
+                    <span class="stk-num">{{ r.stock_units }}ml</span>
+                </td>
+                <td class="muted">{{ r.date|date:"d M" }}</td>
+                <td>
+                    {% if r.patient %}
+                        <span class="by-badge by-patient" title="{{ r.patient.get_name }}">{{ r.patient.get_name|truncatechars:14 }}</span>
+                    {% elif r.request_by_donor %}
+                        <span class="by-badge by-donor" title="{{ r.request_by_donor.get_name }}">{{ r.request_by_donor.get_name|truncatechars:14 }}</span>
+                    {% else %}
+                        <span class="by-badge by-unknown">Unknown</span>
+                    {% endif %}
+                </td>
+                <td style="text-align:center">
+                    <span class="sts-badge sts-{{ r.status|lower }}">{{ r.status }}</span>
+                </td>
+                <td>
+                    <div class="act-row">
+                        <a class="act-btn act-review" href="{% url 'admin-request-recommendations' r.id %}"><i class="fas fa-brain"></i> Review</a>
+                        <form method="post" action="{% url 'emergency-broadcast' r.id %}" style="display:inline;margin:0">{% csrf_token %}<button type="submit" class="act-btn act-broadcast" onclick="return confirm('Send emergency broadcast?')"><i class="fas fa-bullhorn"></i></button></form>
+                        <form method="post" action="{% url 'approve-request' r.id %}" style="display:inline;margin:0">{% csrf_token %}<button type="submit" class="act-btn act-approve" onclick="return confirm('Approve this request? Blood will be deducted from stock.')"><i class="fas fa-check"></i></button></form>
+                        <form method="post" action="{% url 'reject-request' r.id %}" style="display:inline;margin:0">{% csrf_token %}<button type="submit" class="act-btn act-reject" onclick="return confirm('Reject this request?')"><i class="fas fa-times"></i></button></form>
+                    </div>
+                </td>
+            </tr>
             {% endfor %}
-        {% endif %}
-
-        {% if blood_requests %}
-        <div class="table-container">
-            <h4 class="table-title">
-                <i class="fas fa-list-alt"></i> Pending Blood Requests ({{ total_pending }} requests, {{ total_pending_units }}ml total)
-            </h4>
-            
-            <div class="table-responsive">
-                <table class="table enhanced-table">
-                    <thead>
-                        <tr>
-                            <th scope="col"><i class="fas fa-hashtag"></i> ID</th>
-                            <th scope="col"><i class="fas fa-user"></i> Patient Name</th>
-                            <th scope="col"><i class="fas fa-calendar-alt"></i> Age</th>
-                            <th scope="col"><i class="fas fa-stethoscope"></i> Reason</th>
-                            <th scope="col"><i class="fas fa-tint"></i> Blood Group</th>
-                            <th scope="col"><i class="fas fa-flask"></i> Unit (ml)</th>
-                            <th scope="col"><i class="fas fa-exclamation-triangle"></i> Priority</th>
-                            <th scope="col"><i class="fas fa-warehouse"></i> Stock Level</th>
-                            <th scope="col"><i class="fas fa-clock"></i> Request Date</th>
-                            <th scope="col"><i class="fas fa-user-tag"></i> Requested By</th>
-                            <th scope="col"><i class="fas fa-info-circle"></i> Status</th>
-                            <th scope="col"><i class="fas fa-cogs"></i> Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for blood_request in blood_requests %}
-                        <tr>
-                            <td class="request-id">#{{ blood_request.id }}</td>
-                            <td class="patient-name">{{ blood_request.patient_name }}</td>
-                            <td class="age-display">{{ blood_request.patient_age }} years</td>
-                            <td class="reason-display">{{ blood_request.reason|truncatechars:50 }}</td>
-                            <td><span class="blood-group-badge">{{ blood_request.bloodgroup }}</span></td>
-                            <td class="unit-display">{{ blood_request.unit }} ml</td>
-                            <td style="text-align:center;">
-                                <span class="priority-badge {{ blood_request.priority_css }}">
-                                    {% if blood_request.priority_css == 'priority-critical' %}
-                                        <i class="fas fa-bolt"></i>
-                                    {% elif blood_request.priority_css == 'priority-high' %}
-                                        <i class="fas fa-arrow-up"></i>
-                                    {% elif blood_request.priority_css == 'priority-medium' %}
-                                        <i class="fas fa-minus"></i>
-                                    {% else %}
-                                        <i class="fas fa-arrow-down"></i>
-                                    {% endif %}
-                                    {{ blood_request.priority_label }}
-                                    <span class="priority-score-num">({{ blood_request.priority_score }})</span>
-                                </span>
-                                {% if blood_request.days_waiting > 0 %}
-                                    <div class="days-badge"><i class="fas fa-hourglass-half"></i> {{ blood_request.days_waiting }}d waiting</div>
-                                {% endif %}
-                            </td>
-                            <td style="text-align:center;">
-                                <span class="stock-indicator {{ blood_request.stock_css }}">
-                                    <i class="fas fa-cubes"></i> {{ blood_request.stock_label }}
-                                </span>
-                                <div class="stock-units-num">{{ blood_request.stock_units }} ml</div>
-                            </td>
-                            <td class="date-display">{{ blood_request.date|date:"M d, Y" }}</td>
-                            <td class="requester-info">
-                                {% if blood_request.patient %}
-                                    <span class="badge badge-info">
-                                        <i class="fas fa-user-injured"></i> {{ blood_request.patient.get_name }}
-                                    </span>
-                                {% elif blood_request.request_by_donor %}
-                                    <span class="badge badge-success">
-                                        <i class="fas fa-heart"></i> {{ blood_request.request_by_donor.get_name }}
-                                    </span>
-                                {% else %}
-                                    <span class="badge badge-secondary">
-                                        <i class="fas fa-question"></i> Unknown
-                                    </span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <span class="status-label status-pending">
-                                    <i class="fas fa-clock"></i> {{ blood_request.status }}
-                                </span>
-                            </td>
-                            <td>
-                                <div class="action-buttons">
-                                    <a class="action-btn btn-recommend" href="{% url 'admin-request-recommendations' blood_request.id %}">
-                                        <i class="fas fa-brain"></i> Review & Recommend
-                                    </a>
-                                    <form method="post" action="{% url 'emergency-broadcast' blood_request.id %}" style="display:inline; margin:0;">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn action-btn btn-emergency" onclick="return confirm('Send emergency broadcast to matching available donors?')">
-                                            <i class="fas fa-bullhorn"></i> Broadcast
-                                        </button>
-                                    </form>
-                                    <form method="post" action="{% url 'approve-request' blood_request.id %}" style="display:inline; margin:0;">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn action-btn btn-approve" onclick="return confirm('Are you sure you want to APPROVE this blood request? This will deduct blood from stock.')">
-                                            <i class="fas fa-check"></i> Approve
-                                        </button>
-                                    </form>
-                                    <form method="post" action="{% url 'reject-request' blood_request.id %}" style="display:inline; margin:0;">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn action-btn btn-reject" onclick="return confirm('Are you sure you want to REJECT this blood request? No blood will be deducted from stock.')">
-                                            <i class="fas fa-times"></i> Reject
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        {% else %}
-        <div class="table-container">
-            <div class="no-request-message">
-                <i class="fas fa-inbox" style="font-size: 3rem; margin-bottom: 20px; display: block; color: white;"></i>
-                <h4>No Pending Blood Requests</h4>
-                <p>All blood requests have been processed. Check the request history for completed requests.</p>
-                <a href="{% url 'admin-request-history' %}" class="btn btn-primary mt-3" style="background: linear-gradient(45deg, #27ae60, #2ecc71); border: none; padding: 12px 25px; border-radius: 20px; color: white; text-decoration: none; font-weight: 600;">
-                    <i class="fas fa-history"></i> View Request History
-                </a>
-            </div>
-        </div>
-        {% endif %}
+            </tbody>
+        </table>
     </div>
+    {% else %}
+    <div class="req-card">
+        <div class="empty-msg">
+            <i class="fas fa-inbox"></i>
+            <h4>No Pending Blood Requests</h4>
+            <p>All requests have been processed. <a href="{% url 'admin-request-history' %}"><i class="fas fa-history"></i> View History</a></p>
+        </div>
+    </div>
+    {% endif %}
 </div>
-
-<script>
-function confirmApproval(patientName, bloodGroup, units) {
-    return confirm('Are you sure you want to APPROVE this blood request?\n\nPatient: ' + patientName + '\nBlood Group: ' + bloodGroup + '\nUnits: ' + units + 'ml\n\nThis will deduct blood from stock.');
-}
-
-function confirmRejection(patientName, bloodGroup, units) {
-    return confirm('Are you sure you want to REJECT this blood request?\n\nPatient: ' + patientName + '\nBlood Group: ' + bloodGroup + '\nUnits: ' + units + 'ml\n\nNo blood will be deducted from stock.');
-}
-</script>
 {% endblock content %}

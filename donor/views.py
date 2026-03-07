@@ -15,8 +15,8 @@ from django.utils import timezone
 from blood.services import sms as sms_service
 from blood.forms import FeedbackForm
 from blood.models import Feedback, InAppNotification
-from .forms import DonorUserForm, DonorForm
-from .models import Donor, BloodDonate
+from .forms import DonorUserForm, DonorForm, MedicalReportForm
+from .models import Donor, BloodDonate, MedicalReport
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +79,14 @@ def _donor_eligibility_summary(donor: Donor) -> dict:
     if not donor.is_available:
         reasons.append('You are currently marked unavailable.')
 
+    # Medical report check
+    if not donor.is_medical_report_valid:
+        reasons.append('Medical health report is expired or missing. Please upload a new report.')
+    else:
+        days_left = donor.medical_report_days_remaining
+        if days_left is not None and days_left <= 14:
+            reasons.append(f'Medical report expires in {days_left} day(s). Please renew soon.')
+
     if donor.age_years is not None and (donor.age_years < 18 or donor.age_years > 65):
         reasons.append('Age must be between 18 and 65 for donation.')
 
@@ -127,63 +135,77 @@ def donor_set_availability_view(request):
 def donorsignup_view(request):
     userForm = DonorUserForm()
     donorForm = DonorForm()
-    mydict = {'userForm': userForm, 'donorForm': donorForm}
+    reportForm = MedicalReportForm()
+    mydict = {'userForm': userForm, 'donorForm': donorForm, 'reportForm': reportForm}
 
     if request.method == 'POST':
         userForm = DonorUserForm(request.POST)
         donorForm = DonorForm(request.POST, request.FILES)
+        reportForm = MedicalReportForm(request.POST, request.FILES)
 
         logger.debug("Donor signup POST keys: %s", list(request.POST.keys()))
         logger.debug("Donor signup user form valid: %s", userForm.is_valid())
         logger.debug("Donor signup donor form valid: %s", donorForm.is_valid())
+        logger.debug("Donor signup report form valid: %s", reportForm.is_valid())
 
         if userForm.errors:
             logger.debug("Donor signup user form errors: %s", userForm.errors)
         if donorForm.errors:
             logger.debug("Donor signup donor form errors: %s", donorForm.errors)
+        if reportForm.errors:
+            logger.debug("Donor signup report form errors: %s", reportForm.errors)
 
-        if userForm.is_valid() and donorForm.is_valid():
+        # Medical report document is mandatory at signup
+        has_report = bool(request.FILES.get('document'))
+        if not has_report:
+            messages.error(request, 'Medical health report is mandatory. Please upload your recent medical report.')
+            mydict.update({'userForm': userForm, 'donorForm': donorForm, 'reportForm': reportForm})
+            return render(request, 'donor/donorsignup.html', context=mydict)
+
+        if userForm.is_valid() and donorForm.is_valid() and reportForm.is_valid():
             try:
-                # Create user
+                # Create user (inactive until admin approves)
                 user = userForm.save(commit=False)
                 user.set_password(user.password)
+                user.is_active = False  # Account inactive until admin approval
                 user.save()
 
-                # Create donor
+                # Create donor (not approved yet)
                 donor = donorForm.save(commit=False)
                 donor.user = user
+                donor.is_approved = False
                 donor.save()
+
+                # Save the medical report
+                report = reportForm.save(commit=False)
+                report.donor = donor
+                report.document_name = request.FILES['document'].name
+                report.save()
 
                 # Add to donor group
                 my_donor_group, created = Group.objects.get_or_create(name='DONOR')
                 my_donor_group.user_set.add(user)
 
-                # Welcome in-app notification
+                # Notification for donor (will be visible after approval)
                 try:
                     InAppNotification.objects.create(
                         donor=donor,
-                        title='Welcome to BloodBridge!',
+                        title='Registration Received',
                         message=(
-                            f"Hello {user.first_name}, your donor account is now active. "
-                            "Visit your dashboard to update your profile, check eligibility, "
-                            "and start saving lives through blood donation."
+                            f"Hello {user.first_name}, your donor registration has been received. "
+                            "Your account is pending admin approval. You will receive a notification "
+                            "once your account is approved."
                         ),
                     )
                 except Exception:
-                    logger.exception("Failed to create welcome notification for donor %s", user.username)
+                    logger.exception("Failed to create registration notification for donor %s", user.username)
 
-                # Welcome SMS (best-effort, non-blocking)
-                try:
-                    sms_service.send_welcome_sms(
-                        phone=donor.mobile,
-                        first_name=user.first_name,
-                        role='Donor',
-                    )
-                except Exception:
-                    logger.exception("Failed to send welcome SMS for donor %s", user.username)
-
-                messages.success(request, 'Donor account created successfully! You can now login.')
-                return redirect('donorlogin')
+                messages.success(
+                    request,
+                    'Registration submitted successfully! Your account is pending admin approval. '
+                    'You will be notified once approved.'
+                )
+                return redirect('donor-pending-approval')
 
             except Exception as e:
                 logger.exception("Error during donor signup")
@@ -202,10 +224,21 @@ def donorsignup_view(request):
                 for error in errors:
                     error_messages.append(f"{field.replace('_', ' ').title()}: {error}")
 
+            # Collect report form errors
+            for field, errors in reportForm.errors.items():
+                for error in errors:
+                    error_messages.append(f"Medical Report {field.replace('_', ' ').title()}: {error}")
+
             for error in error_messages:
                 messages.error(request, error)
 
+    mydict.update({'userForm': userForm, 'donorForm': donorForm, 'reportForm': reportForm})
     return render(request, 'donor/donorsignup.html', context=mydict)
+
+
+def donor_pending_approval_view(request):
+    """Show a waiting page for donors whose accounts are pending admin approval."""
+    return render(request, 'donor/pending_approval.html')
 
 def donorlogin_view(request):
     if request.method == 'POST':
@@ -214,12 +247,41 @@ def donorlogin_view(request):
 
         logger.debug("Donor login attempt - Username: %s", username)
 
+        # Check if user exists but is inactive (pending approval)
+        try:
+            check_user = User.objects.get(username=username)
+            if not check_user.is_active and check_user.groups.filter(name='DONOR').exists():
+                try:
+                    donor = Donor.objects.get(user=check_user)
+                    if not donor.is_approved:
+                        messages.warning(
+                            request,
+                            'Your account is pending admin approval. Please wait for approval before logging in.'
+                        )
+                        return render(request, 'donor/donorlogin.html')
+                except Donor.DoesNotExist:
+                    pass
+        except User.DoesNotExist:
+            pass
+
         user = authenticate(request, username=username, password=password)
         if user is not None:
             logger.debug("User authenticated: %s", user.username)
             logger.debug("User groups: %s", [g.name for g in user.groups.all()])
 
             if user.groups.filter(name='DONOR').exists():
+                # Check if approved
+                try:
+                    donor = Donor.objects.get(user=user)
+                    if not donor.is_approved:
+                        messages.warning(
+                            request,
+                            'Your account is pending admin approval. Please wait for approval before logging in.'
+                        )
+                        return render(request, 'donor/donorlogin.html')
+                except Donor.DoesNotExist:
+                    pass
+
                 login(request, user)
                 messages.success(request, f'Welcome back, {user.first_name}!')
                 return redirect('donor-dashboard')
@@ -325,6 +387,11 @@ def donor_dashboard_view(request):
             'next_milestone': next_milestone,
             'lives_helped': max(1, total_units_donated // 350) if total_units_donated else 0,
             'city_leaders': city_leaders,
+            # Medical report status
+            'is_medical_report_valid': donor.is_medical_report_valid,
+            'medical_report_expiry': donor.medical_report_expiry_date,
+            'medical_report_days_remaining': donor.medical_report_days_remaining,
+            'latest_medical_report': donor.latest_medical_report,
         }
         
     except Donor.DoesNotExist:
@@ -858,3 +925,41 @@ def donor_appointments_view(request):
         slot.remaining = max(int(slot.capacity or 0) - booked, 0)
     appointments = DonationAppointment.objects.filter(donor=donor).select_related('slot').order_by('-requested_at')[:25]
     return render(request, 'donor/appointment_booking.html', {'slots': slots, 'appointments': appointments})
+
+
+@login_required
+def donor_upload_medical_report_view(request):
+    """Allow donors to upload or renew medical health reports."""
+    if not request.user.groups.filter(name='DONOR').exists():
+        messages.error(request, 'Access denied. Donor account required.')
+        return redirect('donorlogin')
+
+    donor = get_object_or_404(Donor, user=request.user)
+    reports = MedicalReport.objects.filter(donor=donor).order_by('-uploaded_at')
+
+    form = MedicalReportForm()
+    if request.method == 'POST':
+        form = MedicalReportForm(request.POST, request.FILES)
+        if form.is_valid():
+            report = form.save(commit=False)
+            report.donor = donor
+            report.document_name = request.FILES['document'].name
+            report.save()
+            messages.success(
+                request,
+                'Medical report uploaded successfully! It will be valid for 3 months. '
+                'Admin will verify it shortly.'
+            )
+            return redirect('donor-medical-reports')
+        else:
+            messages.error(request, 'Please fix the errors in the form.')
+
+    context = {
+        'donor': donor,
+        'form': form,
+        'reports': reports,
+        'is_report_valid': donor.is_medical_report_valid,
+        'expiry_date': donor.medical_report_expiry_date,
+        'days_remaining': donor.medical_report_days_remaining,
+    }
+    return render(request, 'donor/medical_reports.html', context)

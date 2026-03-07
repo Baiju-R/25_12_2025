@@ -10,9 +10,15 @@ from django.test import TestCase, Client
 from django.contrib.auth.models import User, Group
 from django.urls import reverse
 
+from django.core.files.uploadedfile import SimpleUploadedFile
+
 from blood.models import BloodRequest, Stock, InAppNotification, Feedback
 from patient.models import Patient
 from patient.forms import PatientUserForm, PatientForm
+
+
+def _fake_pdf(name='file.pdf'):
+    return SimpleUploadedFile(name, b'%PDF-1.4 fake', content_type='application/pdf')
 
 
 class PatientSignupTest(TestCase):
@@ -29,16 +35,19 @@ class PatientSignupTest(TestCase):
             'last_name': 'User',
             'username': 'ptestuser',
             'password': 'Str0ng!Pass99',
+            'aadhaar_number': '123456789012',
             'age': 30,
             'bloodgroup': 'O+',
             'disease': 'Anemia',
             'doctorname': 'Dr. Smith',
             'address': '123 Main St',
             'mobile': '9385425650',
+            'doctor_prescription': _fake_pdf('rx.pdf'),
         })
-        self.assertEqual(resp.status_code, 302)  # redirect on success
+        self.assertEqual(resp.status_code, 302)  # redirect to pending-approval
         self.assertTrue(User.objects.filter(username='ptestuser').exists())
         user = User.objects.get(username='ptestuser')
+        self.assertFalse(user.is_active)  # inactive until admin approves
         self.assertTrue(user.groups.filter(name='PATIENT').exists())
         self.assertTrue(Patient.objects.filter(user=user).exists())
 
@@ -49,12 +58,14 @@ class PatientSignupTest(TestCase):
             'last_name': 'User',
             'username': 'existinguser',
             'password': 'Str0ng!Pass99',
+            'aadhaar_number': '111122223333',
             'age': 25,
             'bloodgroup': 'A+',
             'disease': 'None',
             'doctorname': 'Dr. A',
             'address': '456 Oak Ave',
             'mobile': '9361046558',
+            'doctor_prescription': _fake_pdf('rx.pdf'),
         })
         # Should stay on signup page with error
         self.assertEqual(resp.status_code, 200)
@@ -65,12 +76,14 @@ class PatientSignupTest(TestCase):
             'last_name': 'Pass',
             'username': 'weakpassuser',
             'password': '123',
+            'aadhaar_number': '444455556666',
             'age': 20,
             'bloodgroup': 'B+',
             'disease': 'Flu',
             'doctorname': 'Dr. B',
             'address': '789 Elm',
             'mobile': '9385425650',
+            'doctor_prescription': _fake_pdf('rx.pdf'),
         })
         self.assertEqual(resp.status_code, 200)  # stays on form
         self.assertFalse(User.objects.filter(username='weakpassuser').exists())
@@ -87,6 +100,7 @@ class PatientLoginTest(TestCase):
             user=self.user, age=28, bloodgroup='A+',
             disease='None', doctorname='Dr. Test',
             address='Test Addr', mobile='+919385425650',
+            is_approved=True,
         )
 
     def test_login_page_renders(self):
@@ -129,6 +143,7 @@ class PatientDashboardTest(TestCase):
             user=self.user, age=35, bloodgroup='B+',
             disease='Thalassemia', doctorname='Dr. Dash',
             address='Dashboard St', mobile='+919385425650',
+            is_approved=True,
         )
         # Seed stock rows
         for bg in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']:
@@ -180,6 +195,7 @@ class PatientRequestTest(TestCase):
             user=self.user, age=40, bloodgroup='O-',
             disease='Accident', doctorname='Dr. Req',
             address='Request Lane', mobile='+919385425650',
+            is_approved=True,
         )
         for bg in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']:
             Stock.objects.get_or_create(bloodgroup=bg, defaults={'unit': 10})
@@ -202,6 +218,7 @@ class PatientRequestTest(TestCase):
             'unit': '200',
             'request_zipcode': '600001',
             'is_urgent': 'on',
+            'doctor_prescription': _fake_pdf('rx.pdf'),
         })
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(BloodRequest.objects.filter(patient=self.patient).exists())
@@ -265,14 +282,16 @@ class PatientFormValidationTest(TestCase):
 
     def test_patient_form_valid_mobile(self):
         form = PatientForm(data={
+            'aadhaar_number': '123456789012',
             'age': 25, 'bloodgroup': 'A+', 'disease': 'None',
             'doctorname': 'Dr. X', 'address': '123 St', 'mobile': '9385425650',
         })
-        self.assertTrue(form.is_valid())
+        self.assertTrue(form.is_valid(), form.errors)
         self.assertTrue(form.cleaned_data['mobile'].startswith('+'))
 
     def test_patient_form_invalid_mobile(self):
         form = PatientForm(data={
+            'aadhaar_number': '123456789012',
             'age': 25, 'bloodgroup': 'A+', 'disease': 'None',
             'doctorname': 'Dr. X', 'address': '123 St', 'mobile': '',
         })
@@ -305,6 +324,7 @@ class PatientFeedbackTest(TestCase):
             user=self.user, age=30, bloodgroup='AB+',
             disease='None', doctorname='Dr. Feedback',
             address='Feedback Road', mobile='+919385425650',
+            is_approved=True,
         )
         self.client.login(username='pfeedback', password='Pass1234!')
 

@@ -523,6 +523,10 @@
                         <span class="progress-step-circle">3</span>
                         <span class="progress-step-label">Donor Info</span>
                     </div>
+                    <div class="progress-step active">
+                        <span class="progress-step-circle">4</span>
+                        <span class="progress-step-label">Medical Report</span>
+                    </div>
                 </div>
 
                 {% if messages %}
@@ -664,9 +668,44 @@
                             </small>
                         </div>
 
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Aadhaar Number <span class="required">*</span></label>
+                                    {% render_field donorForm.aadhaar_number class="form-control" placeholder="123456789012" %}
+                                    <small class="text-muted">12-digit Aadhaar number for identity verification</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Profile Picture (optional)</label>
+                                    {% render_field donorForm.profile_pic class="form-control-file" %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Medical Report Section (Mandatory) -->
+                    <div class="form-section">
+                        <h4 class="section-title">
+                            <i class="fas fa-file-medical"></i>
+                            Medical Health Report <span class="required">*</span>
+                        </h4>
+                        <div class="alert alert-info" style="border-radius:12px; border:none; background: linear-gradient(135deg, #d6eaf8, #ebf5fb);">
+                            <i class="fas fa-info-circle"></i> 
+                            A recent medical health report is <strong>mandatory</strong> for donor registration. 
+                            Reports are valid for <strong>3 months</strong> and must be renewed regularly.
+                        </div>
                         <div class="form-group">
-                            <label class="form-label">Profile Picture (optional)</label>
-                            {% render_field donorForm.profile_pic class="form-control-file" %}
+                            <label class="form-label">Upload Medical Report <span class="required">*</span></label>
+                            {{ reportForm.document }}
+                            <small class="text-muted d-block mt-2">
+                                Accepted formats: PDF, JPG, PNG, DOC, DOCX, BMP, TIFF (max 10MB)
+                            </small>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Notes (optional)</label>
+                            {% render_field reportForm.notes class="form-control" rows="2" placeholder="Any notes about this report..." %}
                         </div>
                     </div>
 
@@ -755,8 +794,13 @@
                     </div>
 
                     <button type="submit" class="btn btn-signup" id="submitBtn">
-                        <i class="fas fa-user-plus"></i> Create Donor Account
+                        <i class="fas fa-user-plus"></i> Submit Registration (Pending Admin Approval)
                     </button>
+
+                    <div class="alert alert-warning mt-3" style="border-radius:12px; border:none; background:linear-gradient(135deg, #fef9e7, #fdf2e9); color:#7d6608;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Your account will be reviewed by an admin before activation. You will receive a welcome message once approved.
+                    </div>
                 </form>
 
                 <div class="login-link">

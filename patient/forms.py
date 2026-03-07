@@ -33,14 +33,19 @@ class PatientForm(forms.ModelForm):
     
     class Meta:
         model = Patient
-        fields = ['age', 'bloodgroup', 'disease', 'doctorname', 'address', 'mobile', 'profile_pic']
+        fields = ['aadhaar_number', 'age', 'bloodgroup', 'disease', 'doctorname', 'address', 'mobile', 'profile_pic', 'doctor_prescription']
         widgets = {
+            'aadhaar_number': forms.TextInput(attrs={'class': 'form-control', 'maxlength': '12', 'pattern': '\\d{12}', 'placeholder': '123456789012'}),
             'age': forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'max': '120'}),
             'disease': forms.TextInput(attrs={'class': 'form-control'}),
             'doctorname': forms.TextInput(attrs={'class': 'form-control'}),
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'mobile': forms.TextInput(attrs={'class': 'form-control'}),
-            'profile_pic': forms.FileInput(attrs={'class': 'form-control-file'})
+            'profile_pic': forms.FileInput(attrs={'class': 'form-control-file'}),
+            'doctor_prescription': forms.FileInput(attrs={
+                'class': 'form-control-file',
+                'accept': '.pdf,.jpg,.jpeg,.png,.doc,.docx',
+            }),
         }
 
     def clean_mobile(self):

@@ -14,10 +14,11 @@ from decimal import Decimal
 from unittest.mock import patch, MagicMock
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from donor.models import Donor, BloodDonate
+from donor.models import Donor, BloodDonate, MedicalReport
 from blood.models import BloodRequest, Stock
 from blood.services.sagemaker_scorer import (
     FEATURE_NAMES,
@@ -291,6 +292,11 @@ class RecommenderAIIntegrationTest(TestCase):
             address="AI St",
             mobile="+919385425650",
             is_available=True,
+        )
+        MedicalReport.objects.create(
+            donor=self.donor,
+            document=SimpleUploadedFile('report.pdf', b'%PDF-1.4 fake', content_type='application/pdf'),
+            document_name='report.pdf',
         )
         self.req = BloodRequest.objects.create(
             patient=None, request_by_donor=None,

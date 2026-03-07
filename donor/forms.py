@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
-from .models import Donor, BloodDonate
+from .models import Donor, BloodDonate, MedicalReport
 from blood.utils.phone import normalize_phone_number
 
 class DonorUserForm(forms.ModelForm):
@@ -48,6 +48,7 @@ class DonorForm(forms.ModelForm):
     class Meta:
         model = Donor
         fields = [
+            'aadhaar_number',
             'bloodgroup', 'address', 'mobile', 'latitude', 'longitude', 'zipcode', 'profile_pic',
             # Medical / eligibility (optional but recommended for smart matching)
             'sex', 'date_of_birth', 'weight_kg', 'hemoglobin_g_dl',
@@ -57,6 +58,7 @@ class DonorForm(forms.ModelForm):
             'smokes',
         ]
         widgets = {
+            'aadhaar_number': forms.TextInput(attrs={'class': 'form-control', 'maxlength': '12', 'pattern': '\\d{12}', 'placeholder': '123456789012'}),
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'mobile': forms.TextInput(attrs={'class': 'form-control'}),
             'zipcode': forms.TextInput(attrs={'class': 'form-control'}),
@@ -187,3 +189,37 @@ class DonorAdminUpdateForm(forms.ModelForm):
         if not normalized:
             raise forms.ValidationError('Enter a valid phone number (preferably with country code).')
         return normalized
+
+
+class MedicalReportForm(forms.ModelForm):
+    """Form for donors to upload medical health reports."""
+    class Meta:
+        model = MedicalReport
+        fields = ['document', 'notes']
+        widgets = {
+            'document': forms.FileInput(attrs={
+                'class': 'form-control-file',
+                'accept': '.pdf,.jpg,.jpeg,.png,.doc,.docx',
+            }),
+            'notes': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 2,
+                'placeholder': 'Optional notes about this report',
+            }),
+        }
+
+    def clean_document(self):
+        doc = self.cleaned_data.get('document')
+        if doc:
+            # Validate file size (max 10MB)
+            if doc.size > 10 * 1024 * 1024:
+                raise forms.ValidationError('File size must be under 10 MB.')
+            # Validate file extension
+            allowed_exts = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.bmp', '.tiff']
+            import os
+            ext = os.path.splitext(doc.name)[1].lower()
+            if ext not in allowed_exts:
+                raise forms.ValidationError(
+                    f'Unsupported file type ({ext}). Allowed: {", ".join(allowed_exts)}'
+                )
+        return doc

@@ -1,12 +1,22 @@
 from datetime import date, timedelta
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
 
-from donor.models import Donor
+from donor.models import Donor, MedicalReport
 from blood.models import BloodRequest
 from blood.services.donor_recommender import recommend_donors_for_request
+
+
+def _add_valid_medical_report(donor):
+    """Create a valid (non-expired) medical report for testing."""
+    return MedicalReport.objects.create(
+        donor=donor,
+        document=SimpleUploadedFile('report.pdf', b'%PDF-1.4 fake', content_type='application/pdf'),
+        document_name='report.pdf',
+    )
 
 
 class DonorRecommenderTests(TestCase):
@@ -20,6 +30,7 @@ class DonorRecommenderTests(TestCase):
             is_available=True,
             last_donated_at=timezone.now().date() - timedelta(days=10),
         )
+        _add_valid_medical_report(donor)
         req = BloodRequest.objects.create(
             patient=None,
             request_by_donor=None,

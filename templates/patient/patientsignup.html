@@ -528,6 +528,10 @@
                         <span class="progress-step-circle">3</span>
                         <span class="progress-step-label">Medical</span>
                     </div>
+                    <div class="progress-step active">
+                        <span class="progress-step-circle">4</span>
+                        <span class="progress-step-label">Prescription</span>
+                    </div>
                 </div>
 
                 {% if messages %}
@@ -635,15 +639,51 @@
                             {% render_field patientForm.address class="form-control" placeholder="Full address" required="true" %}
                         </div>
 
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Aadhaar Number <span class="required">*</span></label>
+                                    {% render_field patientForm.aadhaar_number class="form-control" placeholder="123456789012" required="true" %}
+                                    <small class="text-muted">12-digit Aadhaar number for identity verification</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Profile Picture (Optional)</label>
+                                    {% render_field patientForm.profile_pic class="form-control-file" %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Doctor Prescription Section (Mandatory) -->
+                    <div class="form-section">
+                        <h4 class="section-title">
+                            <i class="fas fa-file-prescription"></i>
+                            Doctor's Prescription <span class="required">*</span>
+                        </h4>
+                        <div class="alert alert-info" style="border-radius:12px; border:none; background: linear-gradient(135deg, #d6eaf8, #ebf5fb);">
+                            <i class="fas fa-info-circle"></i>
+                            A doctor's prescription is <strong>mandatory</strong> for patient registration.
+                            This helps verify your medical requirements.
+                        </div>
                         <div class="form-group">
-                            <label class="form-label">Profile Picture (Optional)</label>
-                            {% render_field patientForm.profile_pic class="form-control-file" %}
+                            <label class="form-label">Upload Prescription <span class="required">*</span></label>
+                            {% render_field patientForm.doctor_prescription class="form-control-file" %}
+                            <small class="text-muted d-block mt-2">
+                                Accepted formats: PDF, JPG, PNG, DOC, DOCX (max 10MB)
+                            </small>
                         </div>
                     </div>
 
                     <button type="submit" class="btn btn-signup" id="submitBtn">
-                        <i class="fas fa-user-plus"></i> Create Patient Account
+                        <i class="fas fa-user-plus"></i> Submit Registration (Pending Admin Approval)
                     </button>
+
+                    <div class="alert alert-warning mt-3" style="border-radius:12px; border:none; background:linear-gradient(135deg, #fef9e7, #fdf2e9); color:#7d6608;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Your account will be reviewed by an admin before activation. You will receive a welcome message once approved.
+                    </div>
                 </form>
 
                 <div class="login-link">

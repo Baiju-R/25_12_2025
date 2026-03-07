@@ -60,6 +60,12 @@ urlpatterns = [
     path('admin-feedback/', blood_views.admin_feedback_list_view, name='admin-feedback-list'),
     path('admin-feedback/<int:pk>/', blood_views.admin_feedback_edit_view, name='admin-feedback-edit'),
 
+    # Admin approval workflow
+    path('admin-pending-approvals/', blood_views.admin_pending_approvals_view, name='admin-pending-approvals'),
+    path('admin-approve-donor/<int:pk>/', blood_views.admin_approve_donor_view, name='admin-approve-donor'),
+    path('admin-approve-patient/<int:pk>/', blood_views.admin_approve_patient_view, name='admin-approve-patient'),
+    path('admin-verify-report/<int:pk>/', blood_views.admin_verify_report_view, name='admin-verify-report'),
+
     # Admin action URLs
     path('update-donor/<int:pk>/', blood_views.update_donor_view, name='update-donor'),
     path('delete-donor/<int:pk>/', blood_views.delete_donor_view, name='delete-donor'),

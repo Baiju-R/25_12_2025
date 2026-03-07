@@ -162,6 +162,18 @@ def recommend_donors_for_request(
         score += weights["blood_match"]
         reasons.append(f"Blood group match: {donor.bloodgroup}")
 
+        # Medical report validity check
+        if not donor.is_medical_report_valid:
+            blockers.append("Medical health report is expired or missing")
+            score -= 30  # Heavy penalty
+            reasons.append("No valid medical report (expired or not uploaded)")
+        else:
+            days_left = donor.medical_report_days_remaining
+            if days_left is not None:
+                reasons.append(f"Medical report valid ({days_left} days remaining)")
+                if days_left <= 14:
+                    score -= 5  # Minor penalty for expiring soon
+
         # Availability
         if donor.is_available:
             score += weights["available"]

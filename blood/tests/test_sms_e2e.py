@@ -9,9 +9,11 @@ from unittest.mock import MagicMock
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 
+from django.core.files.uploadedfile import SimpleUploadedFile
+
 from blood.models import BloodRequest
 from blood.services import sms as sms_service
-from donor.models import BloodDonate, Donor
+from donor.models import BloodDonate, Donor, MedicalReport
 from patient.models import Patient
 
 
@@ -62,6 +64,11 @@ class SMSE2EWorkflowTests(TestCase):
             zipcode="560001",
             is_available=True,
             last_notified_at=None,
+        )
+        MedicalReport.objects.create(
+            donor=self.donor,
+            document=SimpleUploadedFile('report.pdf', b'%PDF-1.4 fake', content_type='application/pdf'),
+            document_name='report.pdf',
         )
 
         self.request_urgent = BloodRequest.objects.create(

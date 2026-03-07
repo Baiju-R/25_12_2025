@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch, call
 from datetime import timedelta
 
 from django.contrib.auth.models import Group, User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, RequestFactory, override_settings
 from django.utils import timezone
 
@@ -27,8 +28,17 @@ from blood.views import (
     _create_inapp_notification_safe,
     _notify_request_owner_inapp,
 )
-from donor.models import BloodDonate, Donor
+from donor.models import BloodDonate, Donor, MedicalReport
 from patient.models import Patient
+
+
+def _add_valid_medical_report(donor):
+    """Create a valid (non-expired) medical report for a donor."""
+    MedicalReport.objects.create(
+        donor=donor,
+        document=SimpleUploadedFile('report.pdf', b'%PDF-1.4 fake', content_type='application/pdf'),
+        document_name='report.pdf',
+    )
 
 
 # ── Constants matching the two real test phones ──────────────────────────────
@@ -103,6 +113,7 @@ class PatientJourneyTest(TestCase):
             zipcode="600001",
             is_available=True,
         )
+        _add_valid_medical_report(self.donor)
 
     # ── Step 1: Patient submits an urgent blood request ──────────────────
     def test_step1_patient_submits_urgent_request_gets_confirmation_sms(self):
@@ -346,6 +357,7 @@ class DonorJourneyTest(TestCase):
             zipcode="625001",
             is_available=True,
         )
+        _add_valid_medical_report(self.donor)
 
         # A patient who will make requests
         self.patient_user = User.objects.create_user(
@@ -589,6 +601,7 @@ class FullLifecycleTest(TestCase):
             address="Chennai", mobile=DONOR_PHONE,
             zipcode="600001", is_available=True,
         )
+        _add_valid_medical_report(self.donor)
         Group.objects.get_or_create(name="DONOR")
         self.donor_user.groups.add(Group.objects.get(name="DONOR"))
 
@@ -895,6 +908,7 @@ class DuplicateDonorPhoneTest(TestCase):
             address="Test", mobile=DONOR_PHONE,
             zipcode="600001", is_available=True,
         )
+        _add_valid_medical_report(self.donor1)
 
         self.donor_user2 = User.objects.create_user(
             username="donor_dup2", password="Dup@1234",
@@ -905,6 +919,7 @@ class DuplicateDonorPhoneTest(TestCase):
             address="Test", mobile=DONOR_PHONE,  # Same phone!
             zipcode="600001", is_available=True,
         )
+        _add_valid_medical_report(self.donor2)
 
     def test_both_donors_get_inapp_notification(self):
         """Both donor records with the same phone get in-app notifications."""
@@ -995,6 +1010,7 @@ class SMSTemplateContentTest(TestCase):
             address="Test", mobile=DONOR_PHONE,
             zipcode="600001", is_available=True,
         )
+        _add_valid_medical_report(self.donor)
 
     def test_approval_message_india_template(self):
         """Approval SMS messages use short India-safe templates."""

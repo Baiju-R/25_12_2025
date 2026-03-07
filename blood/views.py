@@ -15,7 +15,7 @@ from django.contrib.auth.models import Group, User
 from django.core.serializers.json import DjangoJSONEncoder
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Sum, Q, Count, Max
+from django.db.models import Sum, Q, Count, Max, Avg
 from django.db.models.functions import TruncMonth
 from django.http import HttpResponseRedirect, Http404, HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -793,7 +793,53 @@ def admin_feedback_list_view(request):
         .order_by('-created_at')
     )
 
-    return render(request, 'blood/admin_feedback_list.html', {'feedbacks': feedbacks})
+    # Filter support
+    filter_type = request.GET.get('type', '').strip().upper()
+    filter_rating = request.GET.get('rating', '').strip()
+    filter_status = request.GET.get('status', '').strip()
+
+    if filter_type in ('DONATION', 'REQUEST', 'GENERAL'):
+        feedbacks = feedbacks.filter(feedback_for=filter_type)
+    if filter_rating and filter_rating.isdigit() and 1 <= int(filter_rating) <= 5:
+        feedbacks = feedbacks.filter(rating=int(filter_rating))
+    if filter_status == 'public':
+        feedbacks = feedbacks.filter(is_public=True)
+    elif filter_status == 'hidden':
+        feedbacks = feedbacks.filter(is_public=False)
+    elif filter_status == 'replied':
+        feedbacks = feedbacks.exclude(admin_reply='')
+    elif filter_status == 'unreplied':
+        feedbacks = feedbacks.filter(admin_reply='')
+
+    # Summary stats
+    all_fb = models.Feedback.objects.all()
+    total_count = all_fb.count()
+    avg_rating = all_fb.aggregate(avg=Avg('rating'))['avg']
+    avg_rating = round(avg_rating, 1) if avg_rating else 0
+    public_count = all_fb.filter(is_public=True).count()
+    replied_count = all_fb.exclude(admin_reply='').count()
+    rating_dist = {}
+    for star in range(1, 6):
+        rating_dist[star] = all_fb.filter(rating=star).count()
+    by_type = {
+        'donation': all_fb.filter(feedback_for='DONATION').count(),
+        'request': all_fb.filter(feedback_for='REQUEST').count(),
+        'general': all_fb.filter(feedback_for='GENERAL').count(),
+    }
+
+    context = {
+        'feedbacks': feedbacks,
+        'total_count': total_count,
+        'avg_rating': avg_rating,
+        'public_count': public_count,
+        'replied_count': replied_count,
+        'rating_dist': rating_dist,
+        'by_type': by_type,
+        'filter_type': filter_type,
+        'filter_rating': filter_rating,
+        'filter_status': filter_status,
+    }
+    return render(request, 'blood/admin_feedback_list.html', context)
 
 
 @login_required
@@ -1021,6 +1067,10 @@ def admin_dashboard_view(request):
         'feedback_total': feedback_total,
         'feedback_public': feedback_public,
         'feedback_needs_reply': feedback_needs_reply,
+        # Pending approval counts
+        'pending_donor_approvals': dmodels.Donor.objects.filter(is_approved=False).count(),
+        'pending_patient_approvals': pmodels.Patient.objects.filter(is_approved=False).count(),
+        'pending_report_verifications': dmodels.MedicalReport.objects.filter(is_verified=False).count(),
     }
     return render(request, 'blood/admin_dashboard.html', context=dict)
 
@@ -1316,6 +1366,219 @@ def delete_patient_view(request, pk):
         logger.exception("Failed to delete patient %s", patient.id)
         messages.error(request, f'Could not delete patient: {exc}')
     return redirect('admin-patient')
+
+
+# ── Admin Approval Workflow for Donor/Patient Registration ────────────────
+
+@login_required
+def admin_pending_approvals_view(request):
+    """Show all pending donor/patient registrations and unverified medical reports."""
+    if not request.user.is_superuser:
+        return redirect('adminlogin')
+
+    pending_donors = dmodels.Donor.objects.filter(is_approved=False).select_related('user').order_by('-user__date_joined')
+    pending_patients = pmodels.Patient.objects.filter(is_approved=False).select_related('user').order_by('-user__date_joined')
+
+    # Attach latest medical report to each donor for display
+    for donor in pending_donors:
+        donor.latest_report_cached = donor.latest_medical_report
+
+    # Unverified medical reports (uploaded by already-approved donors)
+    pending_reports = (
+        dmodels.MedicalReport.objects
+        .filter(is_verified=False)
+        .select_related('donor__user')
+        .order_by('-uploaded_at')
+    )
+
+    context = {
+        'pending_donors': pending_donors,
+        'pending_patients': pending_patients,
+        'pending_reports': pending_reports,
+    }
+    return render(request, 'blood/admin_pending_approvals.html', context)
+
+
+@login_required
+def admin_verify_report_view(request, pk):
+    """Verify or reject an uploaded medical report."""
+    if not request.user.is_superuser:
+        return redirect('adminlogin')
+
+    report = get_object_or_404(
+        dmodels.MedicalReport.objects.select_related('donor__user'), id=pk
+    )
+
+    if request.method == 'POST':
+        action = request.POST.get('action', '')
+        if action == 'verify':
+            report.is_verified = True
+            report.verified_by = request.user
+            report.verified_at = timezone.now()
+            report.save(update_fields=['is_verified', 'verified_by', 'verified_at'])
+
+            try:
+                models.InAppNotification.objects.create(
+                    donor=report.donor,
+                    title='Medical Report Verified',
+                    message=(
+                        f'Your medical report "{report.document_name}" has been verified by admin. '
+                        'You are now eligible for donor matching.'
+                    ),
+                )
+            except Exception:
+                logger.exception("Failed to create report-verified notification for donor %s", report.donor.user.username)
+
+            messages.success(request, f'Medical report for {report.donor.get_name} has been verified.')
+
+        elif action == 'reject':
+            reason = request.POST.get('rejection_reason', '').strip()
+            report.delete()
+
+            try:
+                models.InAppNotification.objects.create(
+                    donor=report.donor,
+                    title='Medical Report Rejected',
+                    message=(
+                        f'Your medical report "{report.document_name}" was rejected. '
+                        f'Reason: {reason or "Not specified"}. Please upload a valid report.'
+                    ),
+                )
+            except Exception:
+                logger.exception("Failed to create report-rejected notification for donor %s", report.donor.user.username)
+
+            messages.warning(request, f'Medical report for {report.donor.get_name} has been rejected.')
+
+        return redirect('admin-pending-approvals')
+
+    context = {'report': report}
+    return render(request, 'blood/admin_verify_report.html', context)
+
+
+@login_required
+def admin_approve_donor_view(request, pk):
+    """Approve a pending donor registration."""
+    if not request.user.is_superuser:
+        return redirect('adminlogin')
+
+    donor = get_object_or_404(dmodels.Donor.objects.select_related('user'), id=pk)
+
+    if request.method == 'POST':
+        action = request.POST.get('action', '')
+
+        if action == 'approve':
+            with transaction.atomic():
+                donor.is_approved = True
+                donor.approved_at = timezone.now()
+                donor.save(update_fields=['is_approved', 'approved_at'])
+                donor.user.is_active = True
+                donor.user.save(update_fields=['is_active'])
+
+            # Welcome notification
+            try:
+                models.InAppNotification.objects.create(
+                    donor=donor,
+                    title='Welcome to BloodBridge!',
+                    message=(
+                        f"Hello {donor.user.first_name}, your donor account has been approved! "
+                        "You can now login, update your profile, check eligibility, "
+                        "and start saving lives through blood donation."
+                    ),
+                )
+            except Exception:
+                logger.exception("Failed to create welcome notification for donor %s", donor.user.username)
+
+            # Welcome SMS
+            try:
+                sms_service.send_welcome_sms(
+                    phone=donor.mobile,
+                    first_name=donor.user.first_name,
+                    role='Donor',
+                )
+            except Exception:
+                logger.exception("Failed to send welcome SMS for donor %s", donor.user.username)
+
+            messages.success(request, f'Donor {donor.get_name} has been approved. Welcome message sent.')
+
+        elif action == 'reject':
+            reason = request.POST.get('rejection_reason', '').strip()
+            with transaction.atomic():
+                donor.rejection_reason = reason
+                donor.save(update_fields=['rejection_reason'])
+                # Keep user inactive
+            messages.warning(request, f'Donor {donor.get_name} registration has been rejected.')
+
+        return redirect('admin-pending-approvals')
+
+    # GET: show detail view
+    reports = donor.medicalreport_set.order_by('-uploaded_at')
+    context = {
+        'donor': donor,
+        'reports': reports,
+    }
+    return render(request, 'blood/admin_approve_donor.html', context)
+
+
+@login_required
+def admin_approve_patient_view(request, pk):
+    """Approve a pending patient registration."""
+    if not request.user.is_superuser:
+        return redirect('adminlogin')
+
+    patient = get_object_or_404(pmodels.Patient.objects.select_related('user'), id=pk)
+
+    if request.method == 'POST':
+        action = request.POST.get('action', '')
+
+        if action == 'approve':
+            with transaction.atomic():
+                patient.is_approved = True
+                patient.approved_at = timezone.now()
+                patient.save(update_fields=['is_approved', 'approved_at'])
+                patient.user.is_active = True
+                patient.user.save(update_fields=['is_active'])
+
+            # Welcome notification
+            try:
+                models.InAppNotification.objects.create(
+                    patient=patient,
+                    title='Welcome to BloodBridge!',
+                    message=(
+                        f"Hello {patient.user.first_name}, your patient account has been approved! "
+                        "You can now login, submit blood requests, track their status, "
+                        "and find nearby donors."
+                    ),
+                )
+            except Exception:
+                logger.exception("Failed to create welcome notification for patient %s", patient.user.username)
+
+            # Welcome SMS
+            try:
+                sms_service.send_welcome_sms(
+                    phone=patient.mobile,
+                    first_name=patient.user.first_name,
+                    role='Patient',
+                )
+            except Exception:
+                logger.exception("Failed to send welcome SMS for patient %s", patient.user.username)
+
+            messages.success(request, f'Patient {patient.get_name} has been approved. Welcome message sent.')
+
+        elif action == 'reject':
+            reason = request.POST.get('rejection_reason', '').strip()
+            with transaction.atomic():
+                patient.rejection_reason = reason
+                patient.save(update_fields=['rejection_reason'])
+            messages.warning(request, f'Patient {patient.get_name} registration has been rejected.')
+
+        return redirect('admin-pending-approvals')
+
+    # GET: show detail view
+    context = {
+        'patient': patient,
+    }
+    return render(request, 'blood/admin_approve_patient.html', context)
+
 
 @login_required
 def admin_request_view(request):
@@ -2663,7 +2926,7 @@ def admin_reports_export_view(request, report_key, fmt):
     if not _has_role_permission(request.user, 'can_export_reports'):
         return redirect('adminlogin')
 
-    if report_key not in {'stock', 'requests', 'fulfillment'} or fmt not in {'csv', 'pdf'}:
+    if report_key not in {'stock', 'requests', 'fulfillment', 'donors', 'patients', 'donations', 'audit_log'} or fmt not in {'csv', 'pdf'}:
         raise Http404
 
     start_date_raw = request.GET.get('start_date', '').strip()
@@ -2701,7 +2964,7 @@ def admin_reports_export_view(request, report_key, fmt):
                 channel = 'Quick Request'
             rows.append([req.id, req.date, req.patient_name, req.bloodgroup, req.unit, req.status, channel])
         title = 'Blood Requests Report'
-    else:
+    elif report_key == 'fulfillment':
         request_scope = models.BloodRequest.objects.all()
         donation_scope = dmodels.BloodDonate.objects.all()
         if start_date:
@@ -2726,6 +2989,67 @@ def admin_reports_export_view(request, report_key, fmt):
             ['Fulfillment Rate (%)', fulfillment_rate],
         ]
         title = 'Fulfillment Report'
+    elif report_key == 'donors':
+        donors = dmodels.Donor.objects.select_related('user').order_by('user__first_name')
+        headers = ['ID', 'Name', 'Blood Group', 'Mobile', 'Address', 'Zipcode', 'Aadhaar', 'Sex',
+                   'Available', 'Approved', 'Approved At', 'Last Donated']
+        rows = []
+        for d in donors[:2000]:
+            rows.append([
+                d.id, d.get_name, d.bloodgroup, d.mobile, d.address, d.zipcode,
+                d.aadhaar_number, d.get_sex_display() if d.sex else '',
+                'Yes' if d.is_available else 'No',
+                'Yes' if d.is_approved else 'No',
+                d.approved_at.strftime('%Y-%m-%d') if d.approved_at else '',
+                d.last_donated_at.strftime('%Y-%m-%d') if d.last_donated_at else '',
+            ])
+        title = 'Donor Registry Report'
+    elif report_key == 'patients':
+        patients = pmodels.Patient.objects.select_related('user').order_by('user__first_name')
+        headers = ['ID', 'Name', 'Age', 'Blood Group', 'Disease', 'Doctor', 'Mobile',
+                   'Address', 'Aadhaar', 'Approved', 'Approved At']
+        rows = []
+        for p in patients[:2000]:
+            rows.append([
+                p.id, p.get_name, p.age, p.bloodgroup, p.disease, p.doctorname,
+                p.mobile, p.address, p.aadhaar_number,
+                'Yes' if p.is_approved else 'No',
+                p.approved_at.strftime('%Y-%m-%d') if p.approved_at else '',
+            ])
+        title = 'Patient Registry Report'
+    elif report_key == 'donations':
+        donations = dmodels.BloodDonate.objects.select_related('donor__user').order_by('-date', '-id')
+        if start_date:
+            donations = donations.filter(date__gte=start_date)
+        if end_date:
+            donations = donations.filter(date__lte=end_date)
+        donations = donations[:2000]
+        headers = ['ID', 'Date', 'Donor Name', 'Blood Group', 'Units (ml)', 'Age', 'Disease', 'Status']
+        rows = []
+        for don in donations:
+            rows.append([
+                don.id, don.date, don.donor.get_name, don.bloodgroup,
+                don.unit, don.age, don.disease, don.status,
+            ])
+        title = 'Blood Donations Report'
+    elif report_key == 'audit_log':
+        logs = models.ActionAuditLog.objects.order_by('-created_at')
+        if start_date:
+            logs = logs.filter(created_at__date__gte=start_date)
+        if end_date:
+            logs = logs.filter(created_at__date__lte=end_date)
+        logs = logs[:2000]
+        headers = ['Date', 'Action', 'Entity Type', 'Entity ID', 'Blood Group', 'Units',
+                   'Status Before', 'Status After', 'Actor', 'Notes']
+        rows = []
+        for log in logs:
+            rows.append([
+                log.created_at.strftime('%Y-%m-%d %H:%M'), log.get_action_display(),
+                log.get_entity_type_display(), log.entity_id, log.bloodgroup, log.units,
+                log.status_before, log.status_after,
+                log.actor_username or 'system', log.notes,
+            ])
+        title = 'Audit Log Report'
 
     if fmt == 'csv':
         filename = f"{report_key}_report_{timezone.now().strftime('%Y%m%d_%H%M')}.csv"
@@ -2838,7 +3162,7 @@ def admin_analytics_view(request):
     custom_end = request.GET.get('end_date')
     compare_mode = request.GET.get('compare', '')
     requested_panel = request.GET.get('panel', 'overview')
-    allowed_panels = {'overview', 'operations', 'inventory', 'community'}
+    allowed_panels = {'overview', 'operations', 'inventory', 'demographics', 'community'}
     active_panel = requested_panel if requested_panel in allowed_panels else 'overview'
     fallback_applied = False
     fallback_message = ''
@@ -3332,6 +3656,108 @@ def admin_analytics_view(request):
 
     top_inventory_risks = [row for row in inventory_pressure_rows if row['risk_level'] != 'Low'][:5]
 
+    # ── Demographics & system metrics ──────────────────────────────
+    total_donors = dmodels.Donor.objects.filter(is_approved=True).count()
+    total_patients = pmodels.Patient.objects.filter(is_approved=True).count()
+    active_donor_ids = set(approved_donations_qs.values_list('donor_id', flat=True).distinct())
+    active_donors_count = len(active_donor_ids)
+    total_stock_units = round(sum(blood_group_stock.values()))
+    avg_daily_requests = round(summary_snapshot['requests_total'] / date_span, 1) if date_span else 0
+    avg_daily_donations = round(summary_snapshot['donations_approved'] / date_span, 1) if date_span else 0
+
+    # Donor blood group distribution
+    donor_bg_qs = list(
+        dmodels.Donor.objects.filter(is_approved=True)
+        .values('bloodgroup').annotate(count=Count('id')).order_by('bloodgroup')
+    )
+    donor_bg_data = json.dumps({
+        'labels': [e['bloodgroup'] for e in donor_bg_qs],
+        'values': [e['count'] for e in donor_bg_qs],
+    }, cls=DjangoJSONEncoder)
+
+    # Donor gender distribution
+    gender_labels_map = {'M': 'Male', 'F': 'Female', 'O': 'Other', 'U': 'Undisclosed'}
+    donor_gender_qs = list(
+        dmodels.Donor.objects.filter(is_approved=True)
+        .values('sex').annotate(count=Count('id'))
+    )
+    donor_gender_data = json.dumps({
+        'labels': [gender_labels_map.get(e['sex'], e['sex']) for e in donor_gender_qs],
+        'values': [e['count'] for e in donor_gender_qs],
+    }, cls=DjangoJSONEncoder)
+
+    # Donor age distribution
+    age_buckets = OrderedDict([('18-25', 0), ('26-35', 0), ('36-45', 0), ('46-55', 0), ('56+', 0)])
+    for dob in dmodels.Donor.objects.filter(
+        is_approved=True, date_of_birth__isnull=False,
+    ).values_list('date_of_birth', flat=True):
+        age = (today - dob).days // 365
+        if age < 26:
+            age_buckets['18-25'] += 1
+        elif age < 36:
+            age_buckets['26-35'] += 1
+        elif age < 46:
+            age_buckets['36-45'] += 1
+        elif age < 56:
+            age_buckets['46-55'] += 1
+        else:
+            age_buckets['56+'] += 1
+    donor_age_data = json.dumps({
+        'labels': list(age_buckets.keys()),
+        'values': list(age_buckets.values()),
+    }, cls=DjangoJSONEncoder)
+
+    # Donor availability
+    available_donors = dmodels.Donor.objects.filter(is_approved=True, is_available=True).count()
+    unavailable_donors = total_donors - available_donors
+    donor_availability_data = json.dumps({
+        'labels': ['Available', 'Unavailable'],
+        'values': [available_donors, unavailable_donors],
+    }, cls=DjangoJSONEncoder)
+
+    # Patient disease breakdown (top 8)
+    patient_disease_qs = list(
+        pmodels.Patient.objects.filter(is_approved=True)
+        .exclude(disease='')
+        .values('disease')
+        .annotate(count=Count('id'))
+        .order_by('-count')[:8]
+    )
+    patient_disease_data = json.dumps({
+        'labels': [e['disease'] for e in patient_disease_qs],
+        'values': [e['count'] for e in patient_disease_qs],
+    }, cls=DjangoJSONEncoder)
+
+    # Urgency breakdown
+    urgent_count = requests_qs.filter(is_urgent=True).count()
+    normal_count = requests_qs.filter(is_urgent=False).count()
+    urgency_data = json.dumps({
+        'labels': ['Urgent', 'Normal'],
+        'values': [urgent_count, normal_count],
+    }, cls=DjangoJSONEncoder)
+
+    # Stock health cards
+    stock_health_rows = []
+    for bg in blood_groups:
+        units = blood_group_stock.get(bg, 0)
+        if units < 500:
+            health = 'critical'
+        elif units < 1000:
+            health = 'low'
+        elif units < 2000:
+            health = 'adequate'
+        else:
+            health = 'healthy'
+        stock_health_rows.append({'bloodgroup': bg, 'units': round(units), 'health': health})
+
+    # Feedback summary
+    feedback_qs = models.Feedback.objects.all()
+    feedback_summary = {
+        'total': feedback_qs.count(),
+        'avg_rating': round(feedback_qs.aggregate(avg=Avg('rating'))['avg'] or 0, 1),
+        'public_count': feedback_qs.filter(is_public=True).count(),
+    }
+
     context = {
         'date_range_label': date_range_label,
         'range_param': range_param,
@@ -3339,26 +3765,41 @@ def admin_analytics_view(request):
         'end_date_value': end_date.strftime('%Y-%m-%d'),
         'summary_cards': summary_cards,
         'timeline_data': timeline_payload,
-    'net_flow_data': net_flow_payload,
+        'net_flow_data': net_flow_payload,
         'blood_group_data': blood_group_payload,
         'status_data': status_payload,
-    'status_timeline_data': status_timeline_payload,
-    'channel_mix_data': channel_mix_payload,
-    'weekday_pattern_data': weekday_pattern_payload,
-    'monthly_summary_data': monthly_summary_payload,
-    'top_requesters_data': top_requesters_payload,
-    'top_donor_cards': top_donor_cards,
-    'inventory_pressure_rows': inventory_pressure_rows[:8],
-    'inventory_gap_data': inventory_gap_payload,
-    'top_inventory_risks': top_inventory_risks,
-    'action_flags': action_flags,
+        'status_timeline_data': status_timeline_payload,
+        'channel_mix_data': channel_mix_payload,
+        'weekday_pattern_data': weekday_pattern_payload,
+        'monthly_summary_data': monthly_summary_payload,
+        'top_requesters_data': top_requesters_payload,
+        'top_donor_cards': top_donor_cards,
+        'inventory_pressure_rows': inventory_pressure_rows[:8],
+        'inventory_gap_data': inventory_gap_payload,
+        'top_inventory_risks': top_inventory_risks,
+        'action_flags': action_flags,
         'comparison_rows': comparison_rows,
         'compare_enabled': compare_enabled,
         'conversion_rate': conversion_rate,
-    'fulfillment_ratio': fulfillment_ratio,
+        'fulfillment_ratio': fulfillment_ratio,
         'fallback_applied': fallback_applied,
         'fallback_message': fallback_message,
         'active_panel': active_panel,
+        'total_donors': total_donors,
+        'total_patients': total_patients,
+        'active_donors_count': active_donors_count,
+        'total_stock_units': total_stock_units,
+        'avg_daily_requests': avg_daily_requests,
+        'avg_daily_donations': avg_daily_donations,
+        'donor_bg_data': donor_bg_data,
+        'donor_gender_data': donor_gender_data,
+        'donor_age_data': donor_age_data,
+        'donor_availability_data': donor_availability_data,
+        'patient_disease_data': patient_disease_data,
+        'urgency_data': urgency_data,
+        'stock_health_rows': stock_health_rows,
+        'feedback_summary': feedback_summary,
+        'urgent_pending_count': urgent_pending_count,
     }
 
     return render(request, 'blood/admin_analytics.html', context)
